@@ -1,0 +1,182 @@
+Import requests
+
+from bs4 import
+
+BeautifulSoup
+
+from nitk.tokenize import
+
+sent tokenize
+
+from sumy.parsers.html
+
+import HtmlParser
+
+from sumy.nlp.tokenizers import Tokenizer suny.summarizers.Iex rank
+
+from
+
+Import LexRankSummarizer from textrank4zh import TextBank4Keyword, TextRank4Sentence import spacy
+
+from
+
+spacy.lang.en.stop words
+
+import STOP WORDS
+
+from gensin, summarization
+
+import summarize
+
+def extract text(url):
+
+Extracts text from a URL
+
+using BeautifulSoup.
+
+try: response =
+
+requests.get(url) soup =
+
+BeautifulSoup(response.conte nt, 'html.parser')) text=
+
+-join(map(lambda p: p.text,
+
+soup.find_all('p')))
+
+return text except: return None
+
+def
+
+summarize with_nltk(text,
+
+num sentences-3):
+
+Generates a summary of
+
+the text using NLTK..
+
+sentences. sent tokenize(text) summary-
+
+join(sentences[:num senten
+
+ces])
+
+return summary
+
+def
+
+summarize_with_sumy(text, num sentences=3): Generates a summary of
+
+the text using Sumy.
+
+parser =
+
+HtmlParser. from string(text,
+
+Tokenizer("english"))
+
+Summarizer
+
+LexRankSummarizer()
+
+summary=
+
+.join(map(str,
+
+summarizer (parser.document,
+
+num sentences)))
+
+return summary def
+
+Summarize_with_textrankdzh(t) ext, num sentences 3):
+
+Generates a summary of
+
+the text using TextRank42H.
+
+TextRank4Sentence()
+
+tras analyze text text,
+
+lower True, source='no-stop-
+
+word') sentences tr4s.get_key sentences(num_s entences-nun sentences) Summary *.join(map(lambdas:
+
+s['sentence), sentences))
+
+return summary
+
+def
+
+summarize with spacy(text,
+
+num sentences-3)!
+
+Generates a summary of
+
+the text using spacy.
+
+spacy.load("en_core_web_sm)
+
+doc nip(text)
+
+sentences [sent for
+
+sent in doc.sents if
+
+sent.text.strip() =].
+
+word frequencies ()
+
+for word in doc: 1t word.text.lower() not in STOP WORDS if word.text not
+
+in word frequencies:
+
+word frequencies[word.text]
+
+else:
+
+word frequencies[word.text]
+
+max frequency.
+
+max(word frequencies.values(
+
+for word in word frequencies.keys():
+
+word frequencies[word] =
+
+word frequencies[word] / max frequency sentence scores = {}
+
+for sent in sentences: for word in sent: word.text.lower() in
+
+word frequencies.keys():
+
+if sent not
+
+in sentence scores.keys(): sentence scores[sent] = word frequencies [ward.text.1
+
+else:
+
+sentence scores[sent] **
+
+word frequencies[word.text.1
+
+ower()]
+
+summary sentences sorted( sentence scores,
+
+key-sentence scores.get,
+
+reverse=True)
+
+[:num sentences)
+
+Summary join(map(str, summary sentences))
+
+return summary der summarize with gensin(text.
+
+nun sentences-3):
+
