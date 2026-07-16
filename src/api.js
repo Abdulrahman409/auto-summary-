@@ -90,7 +90,7 @@ export const graphApi = {
       Cause: f.cause, EventClause: f.event, Consequence: f.consequence,
       Category: f.cat, Scope: f.scope, Likelihood: +f.L, Impact: +f.I,
       Strategy: f.strat, Actions: f.actions, TargetDate: dt(f.target),
-      Status: "Pending triage", Confidential: f.conf ? "Yes" : "No", Tournament: f.tour || "AC27", Tournament: f.tour || "AC27",
+      Status: "Pending triage", Confidential: f.conf ? "Yes" : "No", Tournament: f.tour || "AC27",
     }),
 
   decide: async (sub, decision, { target = "", note = "", level = "" }, registerRows) => {
@@ -125,7 +125,8 @@ export const graphApi = {
           ? [contrib, sub.FunctionalArea].filter(Boolean).join("; ") : contrib,
         SourceRefs: [t.SourceRefs, conf ? `Confidential #${sub._id}` : `${sub.FunctionalArea} #${sub._id}`].filter(Boolean).join("; "),
         LastReviewed: dt(todayISO()),
-        History: conf ? `merged confidential intake #${sub._id}` : `merged intake #${sub._id} from ${sub.FunctionalArea}`,
+        // History is append-only: keep the existing trail, add a dated line.
+        History: [t.History, `${today}: ` + (conf ? `merged confidential intake #${sub._id}` : `merged intake #${sub._id} from ${sub.FunctionalArea}`)].filter(Boolean).join("\n"),
       });
       await patchItem(CONFIG.lists.intake, sub._id, { Decision: "Merge", Status: "Merged", MergeInto: target, RegisterID: target, TriageNotes: note });
       return { target };
@@ -196,7 +197,9 @@ export const graphApi = {
   },
 
   touchRisk: async (row, patch, histLine) =>
-    patchItem(CONFIG.lists.register, row._id, { ...patch, LastReviewed: dt(todayISO()), History: `${todayISO()}: ${histLine}` }),
+    // History is append-only: keep the existing trail, add a dated line.
+    patchItem(CONFIG.lists.register, row._id, { ...patch, LastReviewed: dt(todayISO()),
+      History: [row.History, `${todayISO()}: ${histLine}`].filter(Boolean).join("\n") }),
   listKpi: async () => { try { return await listAll(CONFIG.lists.kpi); } catch { return []; } },
   captureKpi: async (week, fields) => {
     try {
@@ -226,7 +229,6 @@ const mkReg = () => [
   CadenceDays: CADENCE[rating(L * I)], SourceRefs: `${LeadFA} legacy`, History: `${todayISO()}: demo seed`,
 })).map((r) => {
   r.RiskLevel = { "R-0726": "Venue", "R-0727": "National", "R-0728": "City", "R-0732": "City", "R-0729": "National", "R-0730": "Venue" }[r.RegisterID] || "";
-  r.Tournament = "AC27";
   r.Tournament = "AC27";
   if (r.RegisterID === "R-0728") r.MitigationUpdate = "2026-07-12: RCRC reviewing maintenance-freeze request; decision expected end of month.";
   if (r.RegisterID === "R-0726") { r.MitigationUpdate = "2026-07-13: arrival-curve remodel complete; joint police tabletop booked for 24 Jul.";
@@ -296,6 +298,7 @@ const demoInit = () => { if (!demoState) demoState = { reg: [...mkReg(), ...mkGC
       { _id: "v2", _created: D(3), _author: "Demo user", Title: "R-0727", FA: "Access and Accreditation Management", Verdict: "Validated", ValNote: "" },
       { _id: "v3", _created: D(2), _author: "Demo user", Title: "R-0730", FA: "Commercial Operations", Verdict: "Validated", ValNote: "" },
       { _id: "v4", _created: D(1), _author: "Demo user", Title: "R-0734", FA: "Security", Verdict: "Validated", ValNote: "" },
+      { _id: "v5", _created: D(1), _author: "Demo user", Title: "R-0729", FA: "Volunteer Management", Verdict: "Flagged", ValNote: "Attrition figure understated — September intake cohort not counted." },
     ],
     champs: [{ FA: "Transport", ChampionName: "Demo Champion", ChampionEmail: "transport.champion@ac27.local" },
              { FA: "Security", ChampionName: "Demo Champion", ChampionEmail: "security.champion@ac27.local" },
