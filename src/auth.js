@@ -1,8 +1,10 @@
 // ── MSAL: silent-first, popup fallback (iframe-safe — never redirect) ──
-import { PublicClientApplication } from "@azure/msal-browser";
 import { CONFIG } from "./config.js";
 let pca = null;
 export const initAuth = async () => {
+  // MSAL loads on demand: demo mode never calls initAuth, so the library
+  // stays out of the initial bundle entirely.
+  const { PublicClientApplication } = await import("@azure/msal-browser");
   pca = new PublicClientApplication({
     auth: { clientId: CONFIG.clientId, authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
             redirectUri: window.location.origin + window.location.pathname },

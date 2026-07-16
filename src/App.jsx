@@ -4,7 +4,6 @@ import { rating, todayISO, isoWeek, ageDays, dupScreen, TASK_RE, ZGRACE, DUP_LIK
          daysToKickoff, phaseOf, effCadence, hygieneGaps, genTitle } from "./logic.js";
 import { initAuth, signIn } from "./auth.js";
 import { pickApi } from "./api.js";
-import { exportRegister, parseRegisterFile } from "./excel.js";
 import { STR, fmt, dirOf } from "./i18n.js";
 import { sha256 } from "js-sha256";
 
@@ -99,6 +98,7 @@ export default function App({ mode = "all" }) {
   const [toast, setToast] = useState(null);
   const say = (msg, bad) => { setToast({ msg, bad }); setTimeout(() => setToast(null), 4000); };
   const setLangP = (l) => { setLang(l); try { localStorage.setItem("lang", l); } catch {} };
+  useEffect(() => { try { document.documentElement.lang = lang; document.documentElement.dir = dirOf(lang); } catch {} }, [lang]);
 
   const reload = useCallback(async () => {
     setBusy(true);
@@ -180,7 +180,7 @@ export default function App({ mode = "all" }) {
             {view === "submit" && <SubmitView t={t} reg={regT} me={me} say={say} onDone={reload} tour={tour} />}
             {view === "mine" && <MineView t={t} intake={intakeT} me={me} reg={regT} />}
             {view === "pmo" && (!CONFIG.pmoGate?.enabled || pmoOk
-              ? <PMO t={t} reg={regT} intake={weekIntake} issues={issuesT} say={say} reload={reload} deep={deep} clearDeep={() => setDeep(null)} tour={tour} valMap={valMap} regAll={reg} />
+              ? <PMO t={t} reg={regT} intake={intakeT} intakeWeek={weekIntake} issues={issuesT} say={say} reload={reload} deep={deep} clearDeep={() => setDeep(null)} tour={tour} valMap={valMap} regAll={reg} />
               : <GateCard t={t} onTry={tryUnlock} say={say} />)}
             {view === "fa" && <FAView t={t} reg={regT} me={me} say={say} reload={reload} valMap={valMap} />}
             {view === "exec" && (!CONFIG.pmoGate?.enabled || pmoOk
@@ -191,7 +191,7 @@ export default function App({ mode = "all" }) {
         )}
       </div>
 
-      {toast && <div className={`toast ${toast.bad ? "bad" : ""}`}>{toast.msg}</div>}
+      {toast && <div className={`toast ${toast.bad ? "bad" : ""}`} role="status" aria-live="polite">{toast.msg}</div>}
       <div className="wrap foot">{api.demo ? t.foot_demo : t.foot_prod}</div>
     </div>
   );
@@ -338,9 +338,12 @@ function MineView({ t, intake, me, reg }) {
 }
 
 /* ── PMO console ── */
-function PMO({ t, reg, intake, issues, say, reload, deep, clearDeep, tour, valMap, regAll }) {
+function PMO({ t, reg, intake, intakeWeek, issues, say, reload, deep, clearDeep, tour, valMap, regAll }) {
   const [tab, setTab] = useState(deep ? "register" : "queue");
   const [reviewing, setReviewing] = useState(false);
+  // The queue drains ALL pending intake, whatever week it arrived; weekly
+  // stats (decided count, participation, summary) stay scoped to this week.
+  const wk = intakeWeek || intake;
   const pending = intake.filter((s) => s.Status === "Pending triage");
   const openReg = reg.filter((r) => r.Status !== "Closed");
   const openIss = issues.filter((i) => i.Status === "Open");
@@ -355,16 +358,16 @@ function PMO({ t, reg, intake, issues, say, reload, deep, clearDeep, tour, valMa
         {tabs.map(([id, l]) => (
           <button key={id} className={tab === id ? "stab on" : "stab"} onClick={() => setTab(id)}>{l}</button>))}
       </div>
-      {tab === "queue" && <Queue t={t} pending={pending} decided={intake.length - pending.length} reg={reg} say={say} reload={reload} />}
+      {tab === "queue" && <Queue t={t} pending={pending} decided={wk.filter((s) => s.Status !== "Pending triage").length} reg={reg} regAll={regAll} say={say} reload={reload} />}
       {tab === "register" && <RegisterTab t={t} reg={reg} say={say} reload={reload} deep={deep} clearDeep={clearDeep} valMap={valMap} />}
       {tab === "issues" && <IssuesTab t={t} issues={issues} say={say} reload={reload} />}
-      {tab === "health" && <Health t={t} reg={reg} intake={intake} issues={issues} say={say} reload={reload}
+      {tab === "health" && <Health t={t} reg={reg} intake={wk} issues={issues} say={say} reload={reload}
         dueCount={rvQueue.length} onStartReview={() => setReviewing(true)} tour={tour} valMap={valMap} regAll={regAll} />}
     </>
   );
 }
 
-function Queue({ t, pending, decided, reg, say, reload }) {
+function Queue({ t, pending, decided, reg, regAll, say, reload }) {
   const [note, setNote] = useState({});
   const [merge, setMerge] = useState({});
   const [lvl, setLvl] = useState({});
@@ -372,7 +375,9 @@ function Queue({ t, pending, decided, reg, say, reload }) {
     const target = (merge[s._id] ?? (dupScreen(s.Title, s.EventClause, reg)[0]?.r.RegisterID || "")).trim().toUpperCase();
     if (decision === "Return" && !(note[s._id] || "").trim()) return say(t.t_neednote, true);
     try {
-      const r = await api.decide(s, decision, { target, note: note[s._id] || "", level: lvl[s._id] || "" }, reg);
+      // decide() gets the FULL register: the next R-#### must be unique across
+      // tournaments even when the PMO header filter is on.
+      const r = await api.decide(s, decision, { target, note: note[s._id] || "", level: lvl[s._id] || "" }, regAll || reg);
       const mailNote = decision === "Return" ? (r.mailed === true ? " " + t.ret_mail_ok : r.mailed === false ? " " + t.ret_mail_no : "") : "";
       say(decision === "Admit" ? fmt(t.t_admitted, { id: r.riskId }) + (r.breach ? ` · ${t.stat_Escalated}` : "") : decision === "Merge" ? fmt(t.t_merged, { id: r.target }) :
           decision === "Convert-Issue" ? fmt(t.t_logged, { id: r.issueId }) : fmt(t.t_recorded, { d: decision }) + mailNote);
@@ -678,6 +683,8 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
     if (!file) return;
     setImp(t.imp_read);
     try {
+      // ExcelJS/xlsx load on demand — they stay out of the main bundle.
+      const { parseRegisterFile } = await import("./excel.js");
       const { rows, report } = await parseRegisterFile(file);
       if (!rows.length) { setImp(fmt(t.imp_none, { r: report.notes[0] || "—" })); return; }
       rows.forEach((r) => { if (!["AC27", "GC27"].includes(r.Tournament)) r.Tournament = tour || "AC27"; });
@@ -762,7 +769,7 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
       </div></Card>
       <div className="row">
         <Btn kind="gold" onClick={onStartReview} disabled={!dueCount}>{fmt(t.b_review, { n: dueCount })}</Btn>
-        <Btn onClick={() => exportRegister(reg, issues)}>{t.b_dlx}</Btn>
+        <Btn onClick={async () => { try { (await import("./excel.js")).exportRegister(reg, issues); } catch (e) { say(`Failed — ${e.message}`, true); } }}>{t.b_dlx}</Btn>
         <Btn kind="gold" onClick={() => fileRef.current && fileRef.current.click()}>{t.b_upx}</Btn>
         <Btn kind="ghost" onClick={dl}>{t.b_dls}</Btn>
         <Btn kind="quiet" onClick={captureNow}>{t.cap_btn}</Btn>
@@ -914,7 +921,10 @@ function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour }) {
                   const isSel = sel && sel.L === L && sel.I === I;
                   return <div key={`${L}-${I}`}
                     className={`hm-cell ${n ? "clickable" : ""} ${isSel ? "sel" : ""}`}
+                    role={n ? "button" : undefined} tabIndex={n ? 0 : undefined}
+                    aria-label={`L${L} × I${I}: ${n}`}
                     onClick={() => n && setSel(isSel ? null : { L, I })}
+                    onKeyDown={(e) => { if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setSel(isSel ? null : { L, I }); } }}
                     style={{ background: band(L * I), opacity: n ? 1 : 0.28 }}>{n || ""}</div>;
                 })}
               </React.Fragment>
@@ -1104,7 +1114,7 @@ function FAView({ t, reg, me, say, reload, valMap }) {
       </div></Card>
       {fa && !rows.length && <div className="empty">{t.fa_none}</div>}
       {fa && rows.map((r) => (
-        <Card key={r._id} accent={FAV_C[r.FAStatus] || C.line}><div className="pad">
+        <Card key={r._id} accent={FAV_C[favOf(r, valMap)?.st] || C.line}><div className="pad">
           <div className="rowsplit">
             <div><b style={{ color: C.teal }}>{r.RegisterID}</b> <span className="cardtitle">{r.Title}</span>
               <div className="mini">{r.LeadFA === fa ? t.r_lead : t.r_with}: {fa} · {r.Scope} · {t.r_owner} {r.RiskOwner}</div></div>
