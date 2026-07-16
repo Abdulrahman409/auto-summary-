@@ -1,5 +1,8 @@
 {
-  "navigationFallback": { "rewrite": "/index.html" },
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/assets/*", "/*.html"]
+  },
   "globalHeaders": {
     "Content-Security-Policy": "frame-ancestors https://*.sharepoint.com https://teams.microsoft.com"
   }
