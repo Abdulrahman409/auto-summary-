@@ -28,6 +28,27 @@ app automatically on every push. The app detects the placeholder `clientId` in
 If the first run fails at "configure-pages": open **Settings → Pages** on GitHub,
 set **Source = GitHub Actions**, then re-run the workflow from the Actions tab.
 
+### Alternative / production-track host: Azure Static Web Apps
+
+Azure SWA also serves the demo AND is the production host later (it sends the
+`frame-ancestors` header SharePoint embedding requires; GitHub Pages cannot).
+One-time setup in the Azure Portal (~10 min, Free plan):
+
+1. portal.azure.com → **Create a resource → Static Web App**.
+2. Subscription + new resource group (e.g. `rg-ac27-risk`); name
+   `ac27-risk-console`; **Plan: Free**; region nearest you.
+3. **Deployment source: GitHub** → authorize → pick
+   `Abdulrahman409/auto-summary-`, branch `main`.
+4. **Build presets: Custom** → App location `/` · Api location *(empty)* ·
+   Output location `dist`.
+5. Review + create. Azure commits its own workflow to the repo and deploys;
+   the URL appears on the resource's Overview page
+   (`https://<name>.azurestaticapps.net`). Every merge to main redeploys,
+   and pull requests get preview URLs automatically.
+
+`staticwebapp.config.json` lives in `public/` so it ships inside `dist/` —
+that file carries the SharePoint/Teams embedding headers.
+
 **Know before you share the link:**
 - The PMO/Exec gate password is still the default. Fine while the data is fake;
   **rotate it before production** (press F12 in the app, type `pmoHash("NewPassword")`,
