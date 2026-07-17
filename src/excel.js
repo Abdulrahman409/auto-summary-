@@ -182,12 +182,13 @@ const ALIAS = {
   Cause: ["cause","causebecauseof","rootcause","\u0627\u0644\u0633\u0628\u0628","\u0627\u0644\u0623\u0633\u0628\u0627\u0628"],
   EventClause: ["event","eventclause","riskevent","eventthereisariskthat","\u0627\u0644\u062d\u062f\u062b","\u0648\u0635\u0641\u0627\u0644\u062e\u0637\u0631","\u0627\u0644\u0648\u0635\u0641"],
   Consequence: ["consequence","consequenceresultingin","effect","impactdescription","\u0627\u0644\u0646\u062a\u064a\u062c\u0629","\u0627\u0644\u062a\u0628\u0639\u0627\u062a","\u0627\u0644\u0639\u0648\u0627\u0642\u0628","\u0627\u0644\u0627\u062b\u0631\u0627\u0644\u0646\u0627\u062a\u062c","\u0627\u0644\u0623\u062b\u0631\u0627\u0644\u0646\u0627\u062a\u062c"],
-  LeadFA: ["leadfa","functionalarea","fa","department","area","team","\u0627\u0644\u0627\u062f\u0627\u0631\u0629","\u0627\u0644\u0625\u062f\u0627\u0631\u0629","\u0627\u0644\u062c\u0647\u0629","\u0627\u0644\u0627\u062f\u0627\u0631\u0629\u0627\u0644\u0648\u0638\u064a\u0641\u064a\u0629","\u0627\u0644\u0625\u062f\u0627\u0631\u0629\u0627\u0644\u0648\u0638\u064a\u0641\u064a\u0629","\u0627\u0644\u0642\u0633\u0645"],
+  LeadFA: ["leadfa","functionalarea","fa","department","area","team","workstream","\u0627\u0644\u0627\u062f\u0627\u0631\u0629","\u0627\u0644\u0625\u062f\u0627\u0631\u0629","\u0627\u0644\u062c\u0647\u0629","\u0627\u0644\u0627\u062f\u0627\u0631\u0629\u0627\u0644\u0648\u0638\u064a\u0641\u064a\u0629","\u0627\u0644\u0625\u062f\u0627\u0631\u0629\u0627\u0644\u0648\u0638\u064a\u0641\u064a\u0629","\u0627\u0644\u0642\u0633\u0645"],
   ContributingFAs: ["contributingfas","contributors"],
-  Category: ["category","riskcategory","type","\u0627\u0644\u0641\u0626\u0629","\u0627\u0644\u062a\u0635\u0646\u064a\u0641","\u0627\u0644\u0646\u0648\u0639"],
+  EntryType: ["type","entrytype","riskissue","risktype","riskorissue"],
+  Category: ["category","riskcategory","riskcategorysector","sector","\u0627\u0644\u0641\u0626\u0629","\u0627\u0644\u062a\u0635\u0646\u064a\u0641","\u0627\u0644\u0646\u0648\u0639"],
   Scope: ["cityvenuescope","scope","location","city","venue","site","\u0627\u0644\u0646\u0637\u0627\u0642","\u0627\u0644\u0645\u062f\u064a\u0646\u0629","\u0627\u0644\u0645\u0648\u0642\u0639"],
   Likelihood: ["likelihood","likelihood15","probability","prob","l","\u0627\u0644\u0627\u062d\u062a\u0645\u0627\u0644\u064a\u0629","\u0627\u0644\u0627\u062d\u062a\u0645\u0627\u0644"],
-  Impact: ["impact","impact15","severity","i","\u0627\u0644\u0623\u062b\u0631","\u0627\u0644\u0627\u062b\u0631","\u0627\u0644\u0634\u062f\u0629","\u0627\u0644\u062a\u0623\u062b\u064a\u0631"],
+  Impact: ["impact","impact15","severity","sevirity","i","\u0627\u0644\u0623\u062b\u0631","\u0627\u0644\u0627\u062b\u0631","\u0627\u0644\u0634\u062f\u0629","\u0627\u0644\u062a\u0623\u062b\u064a\u0631"],
   Score: ["score","riskscore","rag","exposure","\u0627\u0644\u062f\u0631\u062c\u0629","\u0627\u0644\u0646\u0642\u0627\u0637"],
   Rating: ["rating","riskrating","level","risklevel","priority","\u0627\u0644\u0645\u0633\u062a\u0648\u0649","\u062f\u0631\u062c\u0629\u0627\u0644\u062e\u0637\u0648\u0631\u0629","\u0627\u0644\u062e\u0637\u0648\u0631\u0629"],
   Strategy: ["responsestrategy","strategy","treatment","responsetype","\u0627\u0644\u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629","\u0627\u0633\u062a\u0631\u0627\u062a\u064a\u062c\u064a\u0629\u0627\u0644\u0627\u0633\u062a\u062c\u0627\u0628\u0629"],
@@ -203,13 +204,29 @@ const ALIAS = {
   History: ["history","log","auditlog","comments","notes","\u0627\u0644\u0633\u062c\u0644","\u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a","\u0627\u0644\u062a\u0627\u0631\u064a\u062e"],
 };
 const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, "");
-const RATE_WORDS = { critical: "Critical", veryhigh: "Critical", high: "High", medium: "Medium", moderate: "Medium", low: "Low", verylow: "Low" };
+const RATE_WORDS = { critical: "Critical", veryhigh: "Critical", high: "High", medium: "Medium", med: "Medium", moderate: "Medium", low: "Low", verylow: "Low" };
+// Legacy registers often score L/I in words, not 1–5. Translate the FA's own
+// wording onto the scale (migration convenience — PMO rescores at review).
+const WORD_SCALE = { rare: 1, verylow: 1, unlikely: 2, low: 2, possible: 3, med: 3, medium: 3, moderate: 3,
+  likely: 4, high: 4, almostcertain: 5, veryhigh: 5, certain: 5, critical: 5,
+  "نادر": 1, "منخفض": 2, "محتمل": 3, "متوسط": 3, "مرتفع": 4, "عالي": 4, "شبهمؤكد": 5, "حرج": 5 };
+const scaleOf = (v) => { const n = parseInt(v); if (n >= 1 && n <= 5) return n; return WORD_SCALE[norm(v)] || ""; };
 
 export const parseRegisterFile = async (file) => {
   const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
   const ws = wb.Sheets["Register"] || wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: "" });
+  // Real-world registers put the header row under banners/legends: scan the
+  // first 20 rows and use the row that matches the most known column names.
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  let hdrRow = 0, hdrScore = 0;
+  const isAlias = (n) => !!n && Object.entries(ALIAS).some(([f, a]) => n === norm(f) || a.includes(n));
+  for (let i = 0; i < Math.min(20, grid.length); i++) {
+    const score = grid[i].reduce((s, c) => s + (isAlias(norm(c)) ? 1 : 0), 0);
+    if (score > hdrScore) { hdrScore = score; hdrRow = i; }
+  }
+  const raw = XLSX.utils.sheet_to_json(ws, { defval: "", range: hdrScore >= 2 ? hdrRow : 0 });
   const report = { total: raw.length, dropped: 0, notes: [] };
+  if (hdrRow > 0 && hdrScore >= 2) report.notes.push(`header row found at sheet row ${hdrRow + 1}`);
   if (!raw.length) { report.notes.push("sheet has no data rows"); return { rows: [], report }; }
 
   // build header → field map
@@ -235,21 +252,37 @@ export const parseRegisterFile = async (file) => {
   }
   if (!map.Title && !map.EventClause) { report.notes.push("no column recognisable as a risk title or description"); return { rows: [], report }; }
 
+  // Disambiguate an "Impact" column that actually holds consequence TEXT
+  // (common in legacy files): if its values are long non-scale prose, remap.
+  if (map.Impact && !map.Consequence) {
+    const sample = raw.slice(0, 25).map((r) => r[map.Impact]).filter((v) => String(v).trim());
+    const texty = sample.filter((v) => !scaleOf(v) && String(v).trim().length > 15);
+    if (sample.length && texty.length / sample.length > 0.6) {
+      map.Consequence = map.Impact; delete map.Impact;
+      report.notes.push("'Impact' column carries consequence text — mapped accordingly");
+      // the numeric impact may live under another name (e.g. Severity) that
+      // lost pass 1 to the text column — re-scan the unmapped headers
+      for (const h of headers) {
+        if (Object.values(map).includes(h)) continue;
+        if (ALIAS.Impact.includes(norm(h))) { map.Impact = h; break; }
+      }
+    }
+  }
+
   const rows = [];
   for (const src of raw) {
     const g = (f) => (map[f] !== undefined ? src[map[f]] : "");
     let title = String(g("Title")).trim();
     if (!title) title = genTitle(String(g("EventClause")));
     if (!title) { report.dropped++; continue; }
-    let L = parseInt(g("Likelihood")), I = parseInt(g("Impact"));
-    if (!(L >= 1 && L <= 5)) L = "";
-    if (!(I >= 1 && I <= 5)) I = "";
+    const L = scaleOf(g("Likelihood")), I = scaleOf(g("Impact"));
     let score = L && I ? L * I : parseInt(g("Score")) || "";
     let rate = L && I ? rating(L * I) : RATE_WORDS[norm(g("Rating"))] || (score ? rating(score) : "");
     const AR_ST = { "مفتوح": "Open", "قيدالمعالجة": "Mitigating", "مصعد": "Escalated", "مُصعّد": "Escalated", "مغلق": "Closed", "مُغلق": "Closed" };
     const rawSt = norm(g("Status"));
     const status = AR_ST[rawSt] || ["Open","Mitigating","Escalated","Closed"].find((s) => rawSt.startsWith(norm(s))) || "Open";
     rows.push({
+      EntryType: norm(g("EntryType")) === "issue" ? "Issue" : "Risk",
       RegisterID: String(g("RegisterID")).trim(),
       Tournament: ["AC27","GC27"].find((x) => norm(g("Tournament")).includes(x.toLowerCase())) || "",
       Title: title, Cause: String(g("Cause")).trim(), EventClause: String(g("EventClause")).trim(),
