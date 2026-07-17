@@ -292,7 +292,7 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
         usable.push({
           title: genTitle(event) || String(r.Title || "").slice(0, 72),
           fa: FAS.includes(r.LeadFA) ? r.LeadFA : (f.fa || lsv("myFA")),
-          by: byLine, type: "Risk", cause: r.Cause || "",
+          by: byLine, type: r.EntryType === "Issue" ? "Issue" : "Risk", cause: r.Cause || "",
           event, consequence: cons,
           cat: CATS.includes(r.Category) ? r.Category : "Operational Delivery",
           scope: SCOPES.includes(r.Scope) ? r.Scope : "Tournament-wide",
@@ -820,13 +820,16 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
     try {
       // ExcelJS/xlsx load on demand — they stay out of the main bundle.
       const { parseRegisterFile } = await import("./excel.js");
-      const { rows, report } = await parseRegisterFile(file);
+      const { rows: allRows, report } = await parseRegisterFile(file);
+      // The register holds risks; issue-type rows are reported, not imported.
+      const rows = allRows.filter((r) => r.EntryType !== "Issue");
+      const nIss = allRows.length - rows.length;
       if (!rows.length) { setImp(fmt(t.imp_none, { r: report.notes[0] || "—" })); return; }
       rows.forEach((r) => { if (!["AC27", "GC27"].includes(r.Tournament)) r.Tournament = tour || "AC27"; });
       const res = await api.importRegister(rows, reg, (i, n) => setImp(fmt(t.imp_ing, { i, t: n })));
       setImp(fmt(t.imp_done, { a: res.imported, b: res.skippedDup,
         c: (res.skippedSim ? fmt(t.imp_sim, { n: res.skippedSim }) : "") + (res.assignedIds ? fmt(t.imp_ids, { n: res.assignedIds }) : ""),
-        d: res.failed ? fmt(t.imp_fail, { n: res.failed }) : "" }));
+        d: (res.failed ? fmt(t.imp_fail, { n: res.failed }) : "") + (nIss ? " " + fmt(t.imp_issues, { n: nIss }) : "") }));
       say(fmt(t.imp_toast, { n: res.imported })); reload();
     } catch (err) { setImp(fmt(t.imp_err, { e: err.message })); }
   };
