@@ -55,6 +55,8 @@ const perLang = (t) => [
   ["RegisterTab", App.RegisterTab, { t, reg, say: noop, reload: noop, deep: null, clearDeep: noop, valMap }],
   ["ReviewRound", App.ReviewRound, { t, queue: [...forgotten, ...due], say: noop, onExit: noop }],
   ["ReviewRound(empty)", App.ReviewRound, { t, queue: [], say: noop, onExit: noop }],
+  ["ImportReview", App.ImportReview, { t, rows: reg, reg, say: noop, onExit: noop }],
+  ["ImportReview(empty)", App.ImportReview, { t, rows: [], reg, say: noop, onExit: noop }],
   ["IssuesTab", App.IssuesTab, { t, issues, say: noop, reload: noop }],
   ["Health", App.Health, { t, reg, intake, issues, say: noop, reload: noop, dueCount: 2, onStartReview: noop, tour: "", valMap, regAll: reg }],
   ["Participation", App.Participation, { t, reg, intake, say: noop, valMap }],
