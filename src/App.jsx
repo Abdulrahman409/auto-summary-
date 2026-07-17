@@ -854,10 +854,26 @@ function ImportReview({ t, rows, reg, say, onExit }) {
   const r = rows[i];
   const cur = ls || { L: r.Likelihood || 3, I: r.Impact || 3 };
   const dups = dupScreen(r.Title, r.EventClause, existing);
+  // Rule-based screening checks: evidence and directions, never the verdict.
+  const top = dups[0];
+  const checks = [];
+  if (top && top.sc >= DUP_LIKELY) checks.push({ lv: "stop", tx: fmt(t.ir_c_dup, { id: top.r.RegisterID, sc: top.sc }) });
+  if (TASK_RE.test(r.EventClause || r.Title)) checks.push({ lv: "warn", tx: t.warn_task });
+  if (r.Category === "Safety & Security" && ["High", "Critical"].includes(rating(cur.L * cur.I))) checks.push({ lv: "warn", tx: t.ir_c_breach });
+  if (r.LeadFA && !FAS.includes(r.LeadFA)) checks.push({ lv: "warn", tx: fmt(t.ir_c_fa, { fa: r.LeadFA }) });
+  if (!(r.Likelihood >= 1 && r.Impact >= 1)) checks.push({ lv: "warn", tx: t.ir_c_unscored });
+  if (!r.TargetDate) checks.push({ lv: "warn", tx: t.g_target });
+  else if (r.Status !== "Closed" && String(r.TargetDate).slice(0, 10) < todayISO()) checks.push({ lv: "warn", tx: t.g_past });
+  if (r.Status === "Closed") checks.push({ lv: "note", tx: t.ir_c_closed });
+  const sugg = top && top.sc >= DUP_LIKELY ? { tx: t.ir_s_skip, bg: C.crit }
+    : checks.some((c) => c.lv === "warn") ? { tx: t.ir_s_fix, bg: C.gold }
+    : { tx: t.ir_s_admit, bg: C.green };
+  const CHECK_C = { stop: C.crit, warn: "#7A5410", note: C.dim, ok: C.green };
   return (
     <Card accent={C.teal}>
       <div className="rvbar"><b>{t.ir_title}</b><span>{fmt(t.rv_progress, { i: i + 1, n: rows.length })}</span></div>
       <div className="pad">
+        <div className="fhint" style={{ marginBottom: 10 }}>{t.ir_help}</div>
         <div className="rowsplit">
           <div><span className="cardtitle">{r.Title}</span>
             <div className="mini">{fmt(t.ir_meta, { fa: r.LeadFA || "—", o: r.RiskOwner || "—", st: statLabel(t, r.Status) })}
@@ -867,6 +883,16 @@ function ImportReview({ t, rows, reg, say, onExit }) {
         <p className="cec"><b>{r.EventClause}</b> {r.Consequence}</p>
         {r.Category && <div className="mini">{r.Category}{r.ContributingFAs && <> · {t.r_with} {r.ContributingFAs}</>} · {String(r.TargetDate || "").slice(0, 10)}</div>}
         {r.MitigationUpdate && <div className="updbox"><div className="slabel" style={{ color: C.tgreen }}>{t.mit_latest}</div><div style={{ fontSize: 13 }}>{String(r.MitigationUpdate).slice(0, 240)}</div></div>}
+        <div className="dupbox" style={{ marginTop: 8 }}>
+          <div className="slabel">{t.ir_checks}</div>
+          {(checks.length ? checks : [{ lv: "ok", tx: t.ir_c_clean }]).map((c, k) => (
+            <div key={k} style={{ color: CHECK_C[c.lv], fontSize: 12 }}>• {c.tx}</div>
+          ))}
+          <div className="row" style={{ marginTop: 6 }}>
+            <span className="mini">{t.ir_s_label}</span>
+            <Chip bg={sugg.bg}>{sugg.tx}</Chip>
+          </div>
+        </div>
         {dups.length > 0 && <div className="dupbox"><div className="slabel" style={{ color: C.gold }}>{t.q_matches}</div>
           {dups.map((d) => <div key={d.r.RegisterID || d.r.Title}><b>{d.r.RegisterID}</b> ({d.sc}) — {d.r.Title}</div>)}</div>}
         <div className="row" style={{ margin: "10px 0" }}>
