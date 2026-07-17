@@ -78,7 +78,22 @@ export default function App({ mode = "all" }) {
   const [tour, setTour] = useState(() => { try { return localStorage.getItem("tour") || ""; } catch { return ""; } });
   const setTourP = (v) => { setTour(v); try { localStorage.setItem("tour", v); } catch {} };
   const t = STR[lang] || STR.en;
-  const [view, setView] = useState((TABSETS[mode] || TABSETS.all)[0]);
+  // Landing applies to the public entries (all/fa); pmo.html and exec.html embeds go straight in.
+  const canLand = mode === "all" || mode === "fa";
+  const [role, setRole] = useState(() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } });
+  const [view, setView] = useState(canLand && !role ? "landing" : (TABSETS[mode] || TABSETS.all)[0]);
+  const enter = (r, info = {}) => {
+    try {
+      localStorage.setItem("role", r);
+      if (r === "fa") {
+        if (info.fa) localStorage.setItem("myFA", info.fa);
+        if (info.email) localStorage.setItem("myEmail", info.email);
+        if (info.name) localStorage.setItem("myName", info.name); else localStorage.removeItem("myName");
+      }
+    } catch {}
+    setRole(r);
+    setView(r === "fa" ? "submit" : r);
+  };
   const [pmoOk, setPmoOk] = useState(() => { try { return sessionStorage.getItem("pmoOk") === "1"; } catch { return false; } });
   const tryUnlock = (pw) => {
     if (CONFIG.pmoGate && sha256(pw) === CONFIG.pmoGate.sha256) {
@@ -153,10 +168,11 @@ export default function App({ mode = "all" }) {
                 ))}
               </span>
               <span className="week">{t.week} {week.slice(-2)}</span>
+              {canLand && view !== "landing" && <button className="langbtn" onClick={() => setView("landing")}>{t.land_change}</button>}
               <button className="langbtn" onClick={() => setLangP(lang === "en" ? "ar" : "en")}>{lang === "en" ? "عربي" : "EN"}</button>
             </div>
           </div>
-          {tabs.length > 1 && <div className="tabs">
+          {view !== "landing" && tabs.length > 1 && <div className="tabs">
             {tabs.map(([id, label]) => (
               <button key={id} className={view === id ? "tab on" : "tab"} onClick={() => setView(id)}>{label}</button>
             ))}
@@ -177,6 +193,7 @@ export default function App({ mode = "all" }) {
           </div></Card>
         ) : busy ? <div className="loading">{t.loading}</div> : (
           <>
+            {view === "landing" && <Landing t={t} say={say} mode={mode} onEnter={enter} />}
             {view === "submit" && <SubmitView t={t} reg={regT} me={me} say={say} onDone={reload} tour={tour} />}
             {view === "mine" && <MineView t={t} intake={intakeT} me={me} reg={regT} />}
             {view === "pmo" && (!CONFIG.pmoGate?.enabled || pmoOk
@@ -184,7 +201,7 @@ export default function App({ mode = "all" }) {
               : <GateCard t={t} onTry={tryUnlock} say={say} />)}
             {view === "fa" && <FAView t={t} reg={regT} me={me} say={say} reload={reload} valMap={valMap} />}
             {view === "exec" && (!CONFIG.pmoGate?.enabled || pmoOk
-              ? <ExecView t={t} reg={regT} regAll={reg} intake={weekIntake} issues={issuesT} onRefresh={reload} tour={tour} />
+              ? <ExecView t={t} reg={regT} regAll={reg} intake={weekIntake} issues={issuesT} onRefresh={reload} tour={tour} valMap={valMap} />
               : <GateCard t={t} onTry={tryUnlock} say={say} />)}
             {view === "how" && <SOPView t={t} />}
           </>
@@ -197,13 +214,110 @@ export default function App({ mode = "all" }) {
   );
 }
 
+/* ── Landing — pick a door; FA identity matched against FA Champions ── */
+function Landing({ t, say, mode, onEnter }) {
+  const [fa, setFa] = useState(() => { try { return localStorage.getItem("myFA") || ""; } catch { return ""; } });
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem("myEmail") || ""; } catch { return ""; } });
+  const [champs, setChamps] = useState([]);
+  useEffect(() => { api.listChampions().then(setChamps).catch(() => {}); }, []);
+  const match = /@/.test(email) ? champs.find((c) => String(c.ChampionEmail || "").toLowerCase() === email.trim().toLowerCase()) : null;
+  const matchFA = match ? (match.Title || match.FA || "") : "";
+  const verified = !!match && matchFA === fa;
+  useEffect(() => { if (matchFA && !fa) setFa(matchFA); }, [matchFA]); // auto-pick FA from a known email
+  const ready = fa && /@/.test(email);
+  return (
+    <>
+      <Card accent={C.gold}><div className="pad">
+        <div className="h1">{t.land_title}</div>
+        <p className="dim">{t.land_sub}</p>
+      </div></Card>
+      <Card accent={C.teal}><div className="pad">
+        <div className="slabel">{t.land_fa_t}</div>
+        <div className="fhint" style={{ marginBottom: 8 }}>{t.land_fa_b}</div>
+        <div className="grid2">
+          <Field label={t.f_fa}><Sel value={fa} onChange={(e) => setFa(e.target.value)} options={FAS} /></Field>
+          <Field label={t.land_email}>
+            <input type="email" value={email} placeholder={t.land_email_ph} onChange={(e) => setEmail(e.target.value)} /></Field>
+        </div>
+        {verified && <div className="updbox"><div className="slabel" style={{ color: C.tgreen }}>{fmt(t.land_verified, { n: match.ChampionName || email })}</div></div>}
+        {match && !verified && <div className="warn">{fmt(t.land_otherfa, { fa: matchFA })}{" "}
+          <Btn small kind="ghost" onClick={() => setFa(matchFA)}>{fmt(t.land_use, { fa: matchFA })}</Btn></div>}
+        {ready && !match && champs.length > 0 && <div className="fhint" style={{ marginBottom: 8 }}>{t.land_unknown}</div>}
+        <Btn disabled={!ready} onClick={() => onEnter("fa", { fa, email: email.trim(), name: verified ? match.ChampionName || "" : "" })}>{t.land_go}</Btn>
+      </div></Card>
+      {mode === "all" && (
+        <div className="grid2">
+          <Card><div className="pad">
+            <div className="slabel">{t.land_pmo_t}</div>
+            <p className="dim" style={{ fontSize: 13 }}>{t.land_pmo_b}</p>
+            <Btn kind="ghost" onClick={() => onEnter("pmo")}>{t.land_open}</Btn>
+          </div></Card>
+          <Card><div className="pad">
+            <div className="slabel">{t.land_exec_t}</div>
+            <p className="dim" style={{ fontSize: 13 }}>{t.land_exec_b}</p>
+            <Btn kind="ghost" onClick={() => onEnter("exec")}>{t.land_open}</Btn>
+          </div></Card>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ── Submit ── */
 function SubmitView({ t, reg, me, say, onDone, tour }) {
-  const blank = { fa: "", by: me?.name || "", type: "Risk", title: "", cause: "", event: "", consequence: "", cat: "", scope: "", L: "", I: "", strat: "", actions: "", target: "", conf: false, tour: tour || "AC27" };
+  const lsv = (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+  const blank = { fa: lsv("myFA") || "", by: lsv("myName") || lsv("myEmail") || me?.name || "", type: "Risk", title: "", cause: "", event: "", consequence: "", cat: "", scope: "", L: "", I: "", strat: "", actions: "", target: "", conf: false, tour: tour || "AC27" };
   // Title is generated automatically from the event clause.
   const [f, setF] = useState(blank);
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Legacy register upload: rows become INTAKE submissions (pending triage),
+  // never register rows — FAs cannot write the register (doctrine).
+  const LEG_CAP = 100;
+  const legRef = useRef(null);
+  const [leg, setLeg] = useState(null);
+  const onLegacy = async (e) => {
+    const file = e.target.files[0]; e.target.value = "";
+    if (!file) return;
+    setLeg({ phase: "read" });
+    try {
+      const { parseRegisterFile } = await import("./excel.js");
+      const { rows } = await parseRegisterFile(file);
+      let skipped = 0; const usable = [];
+      const byLine = (lsv("myName") || lsv("myEmail") || me?.name || "FA champion") + " — legacy file";
+      rows.forEach((r) => {
+        const event = String(r.EventClause || r.Title || "").trim();
+        const cons = String(r.Consequence || "").trim();
+        if (event.length < 15 || cons.length < 15) { skipped++; return; }
+        usable.push({
+          title: genTitle(event) || String(r.Title || "").slice(0, 72),
+          fa: FAS.includes(r.LeadFA) ? r.LeadFA : (f.fa || lsv("myFA")),
+          by: byLine, type: "Risk", cause: r.Cause || "",
+          event, consequence: cons,
+          cat: CATS.includes(r.Category) ? r.Category : "Operational Delivery",
+          scope: SCOPES.includes(r.Scope) ? r.Scope : "Tournament-wide",
+          L: r.Likelihood >= 1 && r.Likelihood <= 5 ? r.Likelihood : 3,
+          I: r.Impact >= 1 && r.Impact <= 5 ? r.Impact : 3,
+          strat: STRATS.includes(r.Strategy) ? r.Strategy : "Reduce",
+          actions: String(r.Actions || "").trim() || "Per legacy register.",
+          target: String(r.TargetDate || todayISO()).slice(0, 10),
+          conf: false, tour: ["AC27", "GC27"].includes(r.Tournament) ? r.Tournament : (tour || "AC27"),
+        });
+      });
+      if (!usable.length) { setLeg({ phase: "none" }); return; }
+      setLeg({ phase: "preview", rows: usable.slice(0, LEG_CAP), skipped, capped: usable.length > LEG_CAP });
+    } catch (err) { say(`Failed — ${err.message}`, true); setLeg(null); }
+  };
+  const sendLegacy = async () => {
+    const rows = leg.rows;
+    for (let i = 0; i < rows.length; i++) {
+      setLeg({ phase: "prog", i: i + 1, n: rows.length });
+      try { await api.createIntake(rows[i]); }
+      catch (err) { say(`Failed — ${err.message}`, true); setLeg(null); return; }
+    }
+    say(fmt(t.si_done, { n: rows.length }));
+    setLeg(null); onDone();
+  };
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const score = f.L && f.I ? +f.L * +f.I : null;
   const dups = useMemo(() => f.event.length < 14 ? [] : dupScreen(genTitle(f.event), f.event, reg), [f.event, reg]);
@@ -303,6 +417,27 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
           {!ready && <span className="fhint">{t.needAll}</span>}
         </div>
         <div className="fhint" style={{ marginTop: 8 }}>{t.conf_note}</div>
+      </div></Card>
+
+      <Card accent={C.gold}><div className="pad">
+        <div className="slabel">{t.si_title}</div>
+        <div className="fhint" style={{ marginBottom: 8 }}>{t.si_b}</div>
+        {!leg && <Btn kind="gold" onClick={() => legRef.current && legRef.current.click()}>{t.si_btn}</Btn>}
+        {leg?.phase === "read" && <div className="fhint">{t.si_reading}</div>}
+        {leg?.phase === "none" && <div className="warn">{t.si_none}</div>}
+        {leg?.phase === "preview" && (
+          <>
+            <div className="mini" style={{ marginBottom: 8 }}>
+              {fmt(t.si_preview, { n: leg.rows.length, s: leg.skipped })}{leg.capped && <> {fmt(t.si_cap, { n: LEG_CAP })}</>}
+            </div>
+            <div className="row">
+              <Btn onClick={sendLegacy}>{fmt(t.si_confirm, { n: leg.rows.length })}</Btn>
+              <Btn kind="quiet" onClick={() => setLeg(null)}>{t.si_cancel}</Btn>
+            </div>
+          </>
+        )}
+        {leg?.phase === "prog" && <div className="fhint">{fmt(t.si_prog, { i: leg.i, n: leg.n })}</div>}
+        <input type="file" accept=".xlsx,.xls" style={{ display: "none" }} ref={legRef} onChange={onLegacy} />
       </div></Card>
     </>
   );
@@ -820,7 +955,7 @@ function TrendChart({ t, data }) {
 }
 
 /* ── Executive view ── */
-function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour }) {
+function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour, valMap }) {
   const [city, setCity] = useState("");
   const [sel, setSel] = useState(null);
   const [kpi, setKpi] = useState([]);
@@ -884,6 +1019,26 @@ function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour }) {
       <div className="kpinum" style={{ color: warn ? C.crit : C.teal }}>{n}</div>
       <div className="kpilabel">{label}</div></div>
   );
+
+  // ── Decision drivers ──
+  const ks = [...kpi].sort((a, b) => (a.Title < b.Title ? -1 : 1));
+  const lastK = ks[ks.length - 1], prevK = ks[ks.length - 2];
+  const Delta = ({ label, cur, prev, goodUp }) => {
+    const d = cur - prev;
+    const col = d === 0 ? C.dim : (d > 0) === !!goodUp ? C.green : C.crit;
+    return <span className="mini" style={{ marginInlineEnd: 14 }}>{label} <b>{cur}</b>{" "}
+      <b style={{ color: col }}>{d > 0 ? "▲" : d < 0 ? "▼" : "•"}{d !== 0 ? Math.abs(d) : ""}</b></span>;
+  };
+  const overdueTD = (r) => r.TargetDate && String(r.TargetDate).slice(0, 10) < todayISO();
+  const attn = open
+    .filter((r) => r.Status === "Escalated" || isBreach(r) || (["High", "Critical"].includes(r.Rating) && overdueTD(r)))
+    .sort((a, b) => (b.Score || 0) - (a.Score || 0)).slice(0, 8);
+  const withRes = open.filter((r) => r.ResidualL >= 1 && r.ResidualI >= 1 && r.Score > 0);
+  const mitAvg = withRes.length
+    ? Math.round((100 * withRes.reduce((s, r) => s + Math.max(0, (r.Score - r.ResidualL * r.ResidualI) / r.Score), 0)) / withRes.length) : 0;
+  const mitCov = open.length ? Math.round((100 * withRes.length) / open.length) : 0;
+  const valPct = open.length
+    ? Math.round((100 * open.filter((r) => favOf(r, valMap)?.st === "Validated").length) / open.length) : 100;
 
   return (
     <>
@@ -974,6 +1129,35 @@ function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour }) {
           )}
         </div></Card>
       </div>
+
+      <Card accent={C.teal}><div className="pad">
+        <div className="slabel">{t.dd_title}</div>
+        {prevK && lastK && (
+          <div style={{ marginBottom: 10 }}>
+            <span className="flabel" style={{ marginInlineEnd: 10 }}>{t.dd_wow}</span>
+            <Delta label={t.ex_open} cur={+lastK.OpenTotal || 0} prev={+prevK.OpenTotal || 0} />
+            <Delta label={t.ex_crit} cur={+lastK.CriticalN || 0} prev={+prevK.CriticalN || 0} />
+            <Delta label={t.ex_esc} cur={+lastK.EscalatedN || 0} prev={+prevK.EscalatedN || 0} />
+            <Delta label={t.k_ontime} cur={+lastK.ReviewedPct || 0} prev={+prevK.ReviewedPct || 0} goodUp />
+          </div>
+        )}
+        <div className="flabel">{t.dd_attn}</div>
+        {attn.length ? attn.map((r) => (
+          <div key={r._id} className="soprow">
+            <div style={{ minWidth: 58 }}><Chip bg={RATE_C[r.Rating]}>{r.Score}</Chip></div>
+            <div style={{ flex: 1 }}>
+              <b style={{ color: C.teal }}>{r.RegisterID}</b> {r.Title}
+              {!tour && <> <Chip bg={C.teal}>{r.Tournament || "AC27"}</Chip></>}
+              {r.Status === "Escalated" && <> <Chip bg={C.crit}>{statLabel(t, "Escalated")}</Chip></>}
+              {isBreach(r) && <> <Chip bg={C.crit}>{t.appetite_chip}</Chip></>}
+              {["High", "Critical"].includes(r.Rating) && overdueTD(r) && <> <Chip bg={C.high}>{t.dd_over}</Chip></>}
+              <div className="mini">{r.LeadFA} · {t.r_owner} {r.RiskOwner} · {String(r.TargetDate || "").slice(0, 10)}</div>
+            </div>
+          </div>
+        )) : <div className="fhint">{t.dd_attn_none}</div>}
+        <div className="mini" style={{ marginTop: 10 }}><b>{t.dd_mit}:</b> {withRes.length ? fmt(t.dd_mit_v, { p: mitAvg, c: mitCov }) : t.dd_mit_none}</div>
+        <div className="mini"><b>{t.dd_val}:</b> {fmt(t.dd_val_v, { p: valPct })}</div>
+      </div></Card>
 
       {kpi.length > 1 && (
         <Card><div className="pad">
@@ -1191,4 +1375,4 @@ function Participation({ t, reg, intake, say, valMap }) {
   );
 }
 
-export { SubmitView, MineView, FAView, PMO, Queue, RegisterTab, ReviewRound, IssuesTab, Health, Participation, ExecView, TrendChart, SOPView, GateCard };
+export { Landing, SubmitView, MineView, FAView, PMO, Queue, RegisterTab, ReviewRound, IssuesTab, Health, Participation, ExecView, TrendChart, SOPView, GateCard };

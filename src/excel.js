@@ -251,7 +251,6 @@ export const parseRegisterFile = async (file) => {
     const status = AR_ST[rawSt] || ["Open","Mitigating","Escalated","Closed"].find((s) => rawSt.startsWith(norm(s))) || "Open";
     rows.push({
       RegisterID: String(g("RegisterID")).trim(),
-      Tournament: String(g("Tournament")).trim().toUpperCase(),
       Tournament: ["AC27","GC27"].find((x) => norm(g("Tournament")).includes(x.toLowerCase())) || "",
       Title: title, Cause: String(g("Cause")).trim(), EventClause: String(g("EventClause")).trim(),
       Consequence: String(g("Consequence")).trim(), LeadFA: String(g("LeadFA")).trim(),

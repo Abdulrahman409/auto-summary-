@@ -46,6 +46,7 @@ const cases = [
   ["App(exec)", App.default, { mode: "exec" }],
 ];
 const perLang = (t) => [
+  ["Landing", App.Landing, { t, say: noop, mode: "all", onEnter: noop }],
   ["SubmitView", App.SubmitView, { t, reg, me, say: noop, onDone: noop, tour: "" }],
   ["MineView", App.MineView, { t, intake, me, reg }],
   ["FAView", App.FAView, { t, reg, me, say: noop, reload: noop, valMap }],
@@ -57,8 +58,8 @@ const perLang = (t) => [
   ["IssuesTab", App.IssuesTab, { t, issues, say: noop, reload: noop }],
   ["Health", App.Health, { t, reg, intake, issues, say: noop, reload: noop, dueCount: 2, onStartReview: noop, tour: "", valMap, regAll: reg }],
   ["Participation", App.Participation, { t, reg, intake, say: noop, valMap }],
-  ["ExecView(all)", App.ExecView, { t, reg, regAll: reg, intake, issues, onRefresh: noop, tour: "" }],
-  ["ExecView(GC27)", App.ExecView, { t, reg: reg.filter((r) => r.Tournament === "GC27"), regAll: reg, intake: [], issues, onRefresh: noop, tour: "GC27" }],
+  ["ExecView(all)", App.ExecView, { t, reg, regAll: reg, intake, issues, onRefresh: noop, tour: "", valMap }],
+  ["ExecView(GC27)", App.ExecView, { t, reg: reg.filter((r) => r.Tournament === "GC27"), regAll: reg, intake: [], issues, onRefresh: noop, tour: "GC27", valMap }],
   ["TrendChart", App.TrendChart, { t, data: kpi }],
   ["SOPView", App.SOPView, { t }],
   ["GateCard", App.GateCard, { t, onTry: () => false, say: noop }],
