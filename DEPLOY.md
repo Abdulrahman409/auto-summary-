@@ -41,10 +41,19 @@ One-time setup in the Azure Portal (~10 min, Free plan):
    `Abdulrahman409/auto-summary-`, branch `main`.
 4. **Build presets: Custom** → App location `/` · Api location *(empty)* ·
    Output location `dist`.
-5. Review + create. Azure commits its own workflow to the repo and deploys;
-   the URL appears on the resource's Overview page
-   (`https://<name>.azurestaticapps.net`). Every merge to main redeploys,
-   and pull requests get preview URLs automatically.
+5. Review + create. Azure commits its own workflow to the repo and deploys.
+   **Our production host (exact):** `https://salmon-ground-096000a10.7.azurestaticapps.net`
+   — pages at `/`, `/fa.html`, `/pmo.html`, `/exec.html`, `/setup.html`.
+   Every merge to main redeploys, and pull requests get preview URLs
+   automatically.
+
+   **Entra SPA redirect URIs (exact, for the app registration):**
+   - `https://salmon-ground-096000a10.7.azurestaticapps.net/`
+   - `https://salmon-ground-096000a10.7.azurestaticapps.net/index.html`
+   - `https://salmon-ground-096000a10.7.azurestaticapps.net/fa.html`
+   - `https://salmon-ground-096000a10.7.azurestaticapps.net/pmo.html`
+   - `https://salmon-ground-096000a10.7.azurestaticapps.net/exec.html`
+   - `https://salmon-ground-096000a10.7.azurestaticapps.net/setup.html`
 
 `staticwebapp.config.json` lives in `public/` so it ships inside `dist/` —
 that file carries the SharePoint/Teams embedding headers.
