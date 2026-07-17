@@ -809,10 +809,91 @@ function IssuesTab({ t, issues, say, reload }) {
   });
 }
 
+/* ── Import screening — every migrated row gets a PMO verdict ── */
+function ImportReview({ t, rows, reg, say, onExit }) {
+  const [i, setI] = useState(0);
+  const [admitted, setAdmitted] = useState([]);
+  const [nAdm, setNAdm] = useState(0);
+  const [nSkip, setNSkip] = useState(0);
+  const [ls, setLs] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const existing = [...reg, ...admitted];
+  const next = () => { setI(i + 1); setLs(null); };
+  const admitOne = async () => {
+    if (busy) return;
+    setBusy(true);
+    const row = rows[i];
+    const cur = ls || { L: row.Likelihood || 3, I: row.Impact || 3 };
+    row.Likelihood = +cur.L; row.Impact = +cur.I; row.Score = +cur.L * +cur.I; row.Rating = rating(row.Score);
+    try {
+      const res = await api.importRegister([row], existing);
+      if (res.imported) { setNAdm(nAdm + 1); say(fmt(t.ir_admitted, { id: row.RegisterID })); }
+      else { setNSkip(nSkip + 1); say(t.ir_dupskip, true); }
+      setAdmitted([...admitted, row]); next();
+    } catch (e) { say(`Failed — ${e.message}`, true); }
+    setBusy(false);
+  };
+  const admitRest = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const batch = rows.slice(i);
+      const res = await api.importRegister(batch, existing);
+      setNAdm(nAdm + res.imported); setNSkip(nSkip + res.skippedDup + res.skippedSim);
+      setAdmitted([...admitted, ...batch]); setI(rows.length);
+    } catch (e) { say(`Failed — ${e.message}`, true); }
+    setBusy(false);
+  };
+  if (i >= rows.length) return (
+    <Card accent={C.green}><div className="pad">
+      <div className="h1" style={{ color: C.green }}>{t.ir_title}</div>
+      <p>{fmt(t.ir_done, { a: nAdm, s: nSkip })}</p>
+      <Btn onClick={onExit}>{t.rv_exit}</Btn>
+    </div></Card>
+  );
+  const r = rows[i];
+  const cur = ls || { L: r.Likelihood || 3, I: r.Impact || 3 };
+  const dups = dupScreen(r.Title, r.EventClause, existing);
+  return (
+    <Card accent={C.teal}>
+      <div className="rvbar"><b>{t.ir_title}</b><span>{fmt(t.rv_progress, { i: i + 1, n: rows.length })}</span></div>
+      <div className="pad">
+        <div className="rowsplit">
+          <div><span className="cardtitle">{r.Title}</span>
+            <div className="mini">{fmt(t.ir_meta, { fa: r.LeadFA || "—", o: r.RiskOwner || "—", st: statLabel(t, r.Status) })}
+              {r.Tournament && <> <Chip bg={C.teal}>{r.Tournament}</Chip></>}</div></div>
+          <Chip bg={RATE_C[rating(cur.L * cur.I)]}>{cur.L * cur.I} · {rateLabel(t, rating(cur.L * cur.I))}</Chip>
+        </div>
+        <p className="cec"><b>{r.EventClause}</b> {r.Consequence}</p>
+        {r.Category && <div className="mini">{r.Category}{r.ContributingFAs && <> · {t.r_with} {r.ContributingFAs}</>} · {String(r.TargetDate || "").slice(0, 10)}</div>}
+        {r.MitigationUpdate && <div className="updbox"><div className="slabel" style={{ color: C.tgreen }}>{t.mit_latest}</div><div style={{ fontSize: 13 }}>{String(r.MitigationUpdate).slice(0, 240)}</div></div>}
+        {dups.length > 0 && <div className="dupbox"><div className="slabel" style={{ color: C.gold }}>{t.q_matches}</div>
+          {dups.map((d) => <div key={d.r.RegisterID || d.r.Title}><b>{d.r.RegisterID}</b> ({d.sc}) — {d.r.Title}</div>)}</div>}
+        <div className="row" style={{ margin: "10px 0" }}>
+          <span className="flabel" style={{ marginBottom: 0 }}>{t.resc_label}</span>
+          <select value={cur.L} onChange={(e) => setLs({ ...cur, L: e.target.value })} style={{ width: 64 }}>
+            {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+          <span className="mini">×</span>
+          <select value={cur.I} onChange={(e) => setLs({ ...cur, I: e.target.value })} style={{ width: 64 }}>
+            {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+        </div>
+        <div className="row">
+          <Btn disabled={busy} onClick={admitOne}>{t.ir_admit}</Btn>
+          <Btn kind="quiet" disabled={busy} onClick={() => { setNSkip(nSkip + 1); next(); }}>{t.ir_skip}</Btn>
+          <Btn kind="gold" disabled={busy} onClick={admitRest}>{fmt(t.ir_rest, { n: rows.length - i })}</Btn>
+          <Btn kind="ghost" disabled={busy} onClick={onExit}>{t.rv_exit}</Btn>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /* ── Health ── */
 function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, tour, valMap, regAll }) {
   const fileRef = useRef(null);
   const [imp, setImp] = useState(null);
+  const [staged, setStaged] = useState(null); // { rows, nIss } awaiting guided/bulk choice
+  const [screening, setScreening] = useState(false);
   const onFile = async (e) => {
     const file = e.target.files[0]; e.target.value = "";
     if (!file) return;
@@ -826,6 +907,13 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
       const nIss = allRows.length - rows.length;
       if (!rows.length) { setImp(fmt(t.imp_none, { r: report.notes[0] || "—" })); return; }
       rows.forEach((r) => { if (!["AC27", "GC27"].includes(r.Tournament)) r.Tournament = tour || "AC27"; });
+      setStaged({ rows, nIss });
+      setImp(fmt(t.ir_found, { n: rows.length, i: nIss ? fmt(t.ir_found_iss, { n: nIss }) : "" }));
+    } catch (err) { setImp(fmt(t.imp_err, { e: err.message })); }
+  };
+  const runBulk = async () => {
+    const { rows, nIss } = staged; setStaged(null);
+    try {
       const res = await api.importRegister(rows, reg, (i, n) => setImp(fmt(t.imp_ing, { i, t: n })));
       setImp(fmt(t.imp_done, { a: res.imported, b: res.skippedDup,
         c: (res.skippedSim ? fmt(t.imp_sim, { n: res.skippedSim }) : "") + (res.assignedIds ? fmt(t.imp_ids, { n: res.assignedIds }) : ""),
@@ -833,6 +921,8 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
       say(fmt(t.imp_toast, { n: res.imported })); reload();
     } catch (err) { setImp(fmt(t.imp_err, { e: err.message })); }
   };
+  if (screening && staged) return <ImportReview t={t} rows={staged.rows} reg={reg} say={say}
+    onExit={() => { setScreening(false); setStaged(null); setImp(null); reload(); }} />;
   const open = reg.filter((r) => r.Status !== "Closed");
   const byRate = {}; open.forEach((r) => (byRate[r.Rating] = (byRate[r.Rating] || 0) + 1));
   const decided = intake.filter((s) => s.Status !== "Pending triage");
@@ -914,6 +1004,13 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
         <input type="file" accept=".xlsx,.xls" style={{ display: "none" }} ref={fileRef} onChange={onFile} />
       </div>
       {imp && <div className="fhint" style={{ marginTop: 8 }}>{imp}</div>}
+      {staged && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <Btn onClick={() => setScreening(true)}>{t.ir_guided}</Btn>
+          <Btn kind="gold" onClick={runBulk}>{t.ir_bulk}</Btn>
+          <Btn kind="quiet" onClick={() => { setStaged(null); setImp(null); }}>{t.si_cancel}</Btn>
+        </div>
+      )}
       <div className="fhint" style={{ marginTop: 6 }}>{t.imp_hint}</div>
     </>
   );
@@ -1378,4 +1475,4 @@ function Participation({ t, reg, intake, say, valMap }) {
   );
 }
 
-export { Landing, SubmitView, MineView, FAView, PMO, Queue, RegisterTab, ReviewRound, IssuesTab, Health, Participation, ExecView, TrendChart, SOPView, GateCard };
+export { Landing, SubmitView, MineView, FAView, PMO, Queue, RegisterTab, ReviewRound, ImportReview, IssuesTab, Health, Participation, ExecView, TrendChart, SOPView, GateCard };
