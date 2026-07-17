@@ -5,9 +5,9 @@ export const CONFIG = {
   // Entra ID (Azure AD) app registration — SPA platform
   tenantId: "YOUR-TENANT-ID",          // Directory (tenant) ID
   clientId: "YOUR-CLIENT-ID",          // Application (client) ID
-  // SharePoint site hosting the PLT-RSK-01 lists
-  spHostname: "yourtenant.sharepoint.com",
-  spSitePath: "/sites/PMO",            // site containing the three lists
+  // SharePoint site hosting the PLT-RSK-01 lists (Central Planning Hub)
+  spHostname: "asiancup2027.sharepoint.com",
+  spSitePath: "/sites/centralplanninghub", // site containing the six lists
   lists: { intake: "Risk Intake", register: "Risk Register", issues: "Issues Log", kpi: "Risk KPI Snapshots", champions: "FA Champions", validations: "FA Validations" },
   kickoffDate: "2027-01-07",   // AC27 fallback; per-tournament dates below
   tournaments: [
