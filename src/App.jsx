@@ -992,14 +992,35 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
       <div className="kpinum" style={{ color: ok ? C.green : C.crit }}>{value}</div>
       <div className="kpilabel">{label}</div></div>
   );
-  const dl = () => {
-    const md = [`# Weekly summary — ${isoWeek()}`,
-      `Submissions ${intake.length} · admitted ${cnt("Admitted")} · merged ${cnt("Merged")} · issues ${cnt("Converted to issue")} · returned ${cnt("Returned")}`,
-      `Open ${open.length} (${Object.entries(byRate).map(([k, v]) => `${k}:${v}`).join(" · ")}) · duplicates ${dupRate}% · reviewed on time ${kpiRev}% · forgotten ${forgotten.length}`,
-      ...forgotten.map((z) => `- FORGOTTEN ${z.RegisterID} (${z.Rating}) ${z.Title} — ${ageDays(z.LastReviewed)}d since review`)].join("\n");
+  const dl = async () => {
+    // Branded standalone HTML report — opens anywhere, prints to PDF.
+    const { buildWeeklyReport } = await import("./report.js");
+    const backlogAll = [...forgotten, ...due].map((z) => ({
+      id: z.RegisterID, title: z.Title, rating: z.Rating, ratingLabel: rateLabel(t, z.Rating),
+      days: ageDays(z.LastReviewed), forgotten: forgotten.includes(z),
+    }));
+    const submitted = new Set(intake.map((s) => s.FunctionalArea).filter(Boolean));
+    const openAll = reg.filter((r) => r.Status !== "Closed");
+    const pendVal = openAll.filter((r) => favOf(r, valMap)?.st === "Pending validation").length;
+    const flagged = openAll.filter((r) => favOf(r, valMap)?.st === "Flagged").length;
+    const html = buildWeeklyReport({
+      week: isoWeek(),
+      kicker: tour ? (TOURS.find((x) => x.id === tour)?.kicker || t.kicker) : (CONFIG.progKicker || t.kicker),
+      scopeLabel: tour || t.tour_all,
+      generated: todayISO(),
+      demo: api.demo,
+      tiles: { open: open.length, crit: byRate.Critical || 0, reviewedPct: kpiRev, forgotten: forgotten.length },
+      gate: { sub: intake.length, adm: cnt("Admitted"), mer: cnt("Merged"), iss: cnt("Converted to issue"),
+              ret: cnt("Returned"), openIss: issues.filter((x) => x.Status === "Open").length },
+      ratings: ["Critical", "High", "Medium", "Low"].map((k) => ({ k, label: rateLabel(t, k), n: byRate[k] || 0 })),
+      backlog: backlogAll.slice(0, 12),
+      backlogMore: Math.max(0, backlogAll.length - 12),
+      part: { x: submitted.size, n: FAS.length,
+              line: `${fmt(t.part_line, { x: submitted.size, n: FAS.length })} · ${fmt(t.part_valpend, { n: pendVal })}${flagged ? " · " + fmt(t.part_flagged, { n: flagged }) : ""}` },
+    }, t, t === STR.ar ? "rtl" : "ltr");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
-    a.download = `weekly_summary_${isoWeek()}.md`; a.click();
+    a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    a.download = `weekly_summary_${isoWeek()}.html`; a.click();
   };
   return (
     <>
