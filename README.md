@@ -79,3 +79,11 @@ AC27 LOC). To update it later, edit `FAS` in `src/config.js`.
 - The dup screen is the same lexical model as PIP-RSK-01 (≥70 near-verbatim, 45–69 judgment
   band). Semantic triage assistance stays a PMO-side practice, not a runtime dependency.
 - KPI dashboarding beyond the Health tab: Power BI on the lists, later, optional.
+
+## Schema version notes
+
+- **v1.1** — Risk Intake gains `ProposedEscalation` (choice: Chief level ·
+  Leadership level), the FA's escalation proposal after internal assessment
+  (leadership governance requirement #3). Surfaced as evidence in the PMO
+  queue; the decision remains with adjudication. **provision.ps1 (PLT-RSK-01,
+  sibling kit) must add the same column before provisioning with it.**

@@ -266,7 +266,7 @@ function Landing({ t, say, mode, onEnter }) {
 /* ── Submit ── */
 function SubmitView({ t, reg, me, say, onDone, tour }) {
   const lsv = (k) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
-  const blank = { fa: lsv("myFA") || "", by: lsv("myName") || lsv("myEmail") || me?.name || "", type: "Risk", title: "", cause: "", event: "", consequence: "", cat: "", scope: "", L: "", I: "", strat: "", actions: "", target: "", conf: false, tour: tour || "AC27" };
+  const blank = { fa: lsv("myFA") || "", by: lsv("myName") || lsv("myEmail") || me?.name || "", type: "Risk", title: "", cause: "", event: "", consequence: "", cat: "", scope: "", L: "", I: "", strat: "", actions: "", target: "", esc: "", conf: false, tour: tour || "AC27" };
   // Title is generated automatically from the event clause.
   const [f, setF] = useState(blank);
   const [sent, setSent] = useState(false);
@@ -365,6 +365,7 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
           <div className="slabel">{t.stmt_label}</div>
           {api.demo && <Btn small kind="ghost" onClick={loadExample}>{t.loadExample}</Btn>}
         </div>
+        <div className="fhint" style={{ marginBottom: 8 }}>{t.gate_line}</div>
         <div className="statement">
           <span style={{ color: f.event.length >= 15 ? C.ink : C.line }}>{f.type === "Issue" ? "" : t.riskThat}{f.event ? f.event.replace(/^there is a risk that\s*/i, "") : t.ph_event} </span>
           <span style={{ color: f.consequence.length >= 15 ? C.ink : C.line }}>{t.resulting}{f.consequence ? f.consequence.replace(/^resulting in\s*/i, "") : t.ph_cons}</span>
@@ -410,6 +411,12 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
         <div className="grid2">
           <Field label={t.f_strat}><Sel value={f.strat} onChange={set("strat")} options={f.type === "Issue" ? ["Resolve (Issue)", ...STRATS] : STRATS} /></Field>
           <Field label={t.f_target}><input type="date" value={f.target} onChange={set("target")} /></Field>
+          <Field label={t.f_esc} hint={t.f_esc_hint}>
+            <select value={f.esc} onChange={set("esc")}>
+              <option value="">{t.esc_none}</option>
+              <option value="Chief level">{t.esc_Chief}</option>
+              <option value="Leadership level">{t.esc_Leadership}</option>
+            </select></Field>
         </div>
         <Field label={t.f_actions}><textarea rows={2} value={f.actions} onChange={set("actions")} /></Field>
         <div className="row">
@@ -538,6 +545,7 @@ function Queue({ t, pending, decided, reg, regAll, say, reload }) {
             {TASK_RE.test(s.EventClause) && <div className="warn">{t.warn_task}</div>}
             {s.Category === "Safety & Security" && ["High", "Critical"].includes(rating(s.Likelihood * s.Impact)) &&
               <div className="warn" style={{ borderColor: C.crit, background: "#FBEAEA", color: C.crit }}>{t.appetite_chip}</div>}
+            {s.ProposedEscalation && <div className="warn">{fmt(t.q_escprop, { v: t["esc_" + String(s.ProposedEscalation).split(" ")[0]] || s.ProposedEscalation })}</div>}
             {dups.length > 0 && <div className="dupbox"><div className="slabel" style={{ color: C.gold }}>{t.q_matches}</div>
               {dups.map((d) => <div key={d.r.RegisterID}><b>{d.r.RegisterID}</b> ({d.sc}) — {d.r.Title} <span className="dim">· {rateLabel(t, d.r.Rating)} · {statLabel(t, d.r.Status)}</span></div>)}</div>}
             <div className="grid2" style={{ marginTop: 8 }}>
@@ -1356,7 +1364,8 @@ function SOPView({ t }) {
         <Step d="2" tt={t.how_esc_2.split(".")[0]} body={t.how_esc_2} />
         <Step d="3" tt={t.how_esc_3.split(" —")[0].slice(0, 60)} body={t.how_esc_3} />
         <Step d="4" tt={t.how_esc_4.split(":")[0]} body={t.how_esc_4} />
-        <div className="fhint" style={{ marginTop: 8 }}>{t.how_cont}</div>
+        <div className="fhint" style={{ marginTop: 8 }}>{t.how_conf}</div>
+        <div className="fhint" style={{ marginTop: 4 }}>{t.how_cont}</div>
       </div></Card>
       <Card accent={C.gold}><div className="pad">
         <div className="slabel">{t.how_write_t}</div>
@@ -1481,11 +1490,43 @@ function Participation({ t, reg, intake, say, valMap }) {
     } catch (e) { say(`Failed — ${e.message}`, true); }
     setBusy(false);
   };
+  // Thursday outcomes digest — evidence sharing, per FA (GATE: Evidence day).
+  const digest = async () => {
+    setBusy(true);
+    try {
+      const champs = await api.listChampions();
+      const targets = champs.filter((c) => (c.ChampionEmail || "").includes("@"));
+      if (api.demo) { say(fmt(t.dig_demo, { n: targets.length })); setBusy(false); return; }
+      let sent = 0;
+      for (const c of targets) {
+        const fa = c.Title || c.FA;
+        const mine = open.filter((r) => r.LeadFA === fa || String(r.ContributingFAs || "").includes(fa));
+        const wk = intake.filter((s) => s.FunctionalArea === fa && s.Status !== "Pending triage")
+          .map((s) => `- ${s.Title}: ${s.Status}`).join("\n");
+        if (!mine.length && !wk) continue;
+        const lines = mine.map((r) => `- ${r.RegisterID} [${r.Rating} / ${r.Status}] ${r.Title}` +
+          (r.MitigationUpdate ? `\n  latest: ${r.MitigationUpdate}` : "")).join("\n");
+        try {
+          await api.sendMail(c.ChampionEmail, `AC27/GC27 Risk — weekly outcomes (${fa})`,
+            `Weekly outcomes and status for ${fa}.\n\n` +
+            (lines ? `Your FA's risks on the register:\n${lines}\n\n` : "") +
+            (wk ? `Decisions on this week's submissions:\n${wk}\n\n` : "") +
+            `Open the Risk Console → FA view to validate or flag any row.`);
+          sent++;
+        } catch { /* skip */ }
+      }
+      say(fmt(t.dig_done, { s: sent }));
+    } catch (e) { say(`Failed — ${e.message}`, true); }
+    setBusy(false);
+  };
   return (
     <Card accent={silent.length || pendVal.length ? C.gold : C.green}><div className="pad">
       <div className="rowsplit">
         <div className="slabel">{t.part_title}</div>
-        <Btn small kind="gold" disabled={busy} onClick={remind}>{t.b_remind}</Btn>
+        <span className="row">
+          <Btn small kind="gold" disabled={busy} onClick={remind}>{t.b_remind}</Btn>
+          <Btn small kind="ghost" disabled={busy} onClick={digest}>{t.dig_btn}</Btn>
+        </span>
       </div>
       <div className="mini" style={{ marginBottom: 4 }}>
         <b style={{ color: C.teal }}>{fmt(t.part_line, { x: submitted.size, n: FAS.length })}</b>
