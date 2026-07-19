@@ -37,6 +37,7 @@ const LISTS = [
     ["Category", txt()], ["Scope", choice(...SCOPE_CH)],
     ["Likelihood", num()], ["Impact", num()],
     ["Strategy", choice(...STRAT_CH)], ["Actions", note(2)], ["TargetDate", date()],
+    ["ProposedEscalation", choice("Chief level", "Leadership level")],
     ["Status", choice("Pending triage", "Admitted", "Merged", "Converted to issue", "Returned", "Rejected — not a risk", "Rejected — out of scope")],
     ["Confidential", choice("No", "Yes")],
     ["Decision", txt()], ["MergeInto", txt()], ["TriageNotes", note(2)], ["RegisterID", txt()],

@@ -90,6 +90,7 @@ export const graphApi = {
       Cause: f.cause, EventClause: f.event, Consequence: f.consequence,
       Category: f.cat, Scope: f.scope, Likelihood: +f.L, Impact: +f.I,
       Strategy: f.strat, Actions: f.actions, TargetDate: dt(f.target),
+      ProposedEscalation: f.esc || "",
       Status: "Pending triage", Confidential: f.conf ? "Yes" : "No", Tournament: f.tour || "AC27",
     }),
 
@@ -328,7 +329,8 @@ export const mockApi = {
       Title: f.title, FunctionalArea: f.fa, RaisedBy: f.by, EntryType: f.type, Cause: f.cause,
       EventClause: f.event, Consequence: f.consequence, Category: f.cat, Scope: f.scope,
       Likelihood: +f.L, Impact: +f.I, Score: +f.L * +f.I, Rating: rating(+f.L * +f.I),
-      Strategy: f.strat, Actions: f.actions, TargetDate: f.target, Status: "Pending triage", Confidential: f.conf ? "Yes" : "No", Tournament: f.tour || "AC27" });
+      Strategy: f.strat, Actions: f.actions, TargetDate: f.target, ProposedEscalation: f.esc || "",
+      Status: "Pending triage", Confidential: f.conf ? "Yes" : "No", Tournament: f.tour || "AC27" });
   },
   decide: async (sub, decision, { target = "", note = "", level = "" }, registerRows) => {
     const s = demoInit(); const it = s.intake.find((x) => x._id === sub._id); const today = todayISO();
