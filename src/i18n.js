@@ -7,7 +7,7 @@ export const fmt = (s, map = {}) => String(s).replace(/\{(\w+)\}/g, (_, k) => (m
 
 export const STR = {
   en: {
-    appTitle1: "RISK INTAKE", appTitle2: "& TRIAGE",
+    appTitle1: "RISK INTAKE", appTitle2: "TRIAGE",
     kicker: "AFC Asian Cup Saudi Arabia 2027 · Local Organising Committee",
     week: "Week", demoChip: "Demo",
     nav_submit: "Submit a risk", nav_mine: "My submissions", nav_pmo: "PMO triage",
