@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { BRAND as C, CONFIG, FAS, CATS, SCOPES, STRATS } from "./config.js";
-import { rating, todayISO, isoWeek, ageDays, dupScreen, TASK_RE, ZGRACE, DUP_LIKELY, CADENCE,
+import { rating, todayISO, isoWeek, cycleWeek, ageDays, dupScreen, sim, TASK_RE, ZGRACE, DUP_LIKELY, CADENCE,
          daysToKickoff, phaseOf, effCadence, hygieneGaps, genTitle } from "./logic.js";
 import { initAuth, signIn } from "./auth.js";
 import { pickApi } from "./api.js";
@@ -79,9 +79,10 @@ export default function App({ mode = "all" }) {
   const setTourP = (v) => { setTour(v); try { localStorage.setItem("tour", v); } catch {} };
   const t = STR[lang] || STR.en;
   // Landing applies to the public entries (all/fa); pmo.html and exec.html embeds go straight in.
+  // It is ALWAYS the first screen on open — saved FA/email prefill it so returning users continue in one tap.
   const canLand = mode === "all" || mode === "fa";
   const [role, setRole] = useState(() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } });
-  const [view, setView] = useState(canLand && !role ? "landing" : (TABSETS[mode] || TABSETS.all)[0]);
+  const [view, setView] = useState(canLand ? "landing" : (TABSETS[mode] || TABSETS.all)[0]);
   const enter = (r, info = {}) => {
     try {
       localStorage.setItem("role", r);
@@ -115,11 +116,16 @@ export default function App({ mode = "all" }) {
   const setLangP = (l) => { setLang(l); try { localStorage.setItem("lang", l); } catch {} };
   useEffect(() => { try { document.documentElement.lang = lang; document.documentElement.dir = dirOf(lang); } catch {} }, [lang]);
 
+  // The full-screen loading state is for the FIRST load only. Later reloads
+  // refresh data in place — flipping busy here would unmount the active view
+  // and wipe its local state (e.g. the SUBMITTED confirmation after submit).
+  const loadedOnce = useRef(false);
   const reload = useCallback(async () => {
-    setBusy(true);
+    if (!loadedOnce.current) setBusy(true);
     try {
       const [r, i, s, v] = await Promise.all([api.listRegister(), api.listIntake(), api.listIssues(), api.listValidations()]);
       setReg(r); setIntake(i); setIssues(s); setVals(v);
+      loadedOnce.current = true;
     } catch (e) { say(`Load failed — ${e.message}`, true); }
     setBusy(false);
   }, []);
@@ -137,10 +143,11 @@ export default function App({ mode = "all" }) {
     catch (e) { say(`Sign-in failed — ${e.message}`, true); }
   };
 
-  const week = isoWeek();
+  const week = cycleWeek(); // Sun–Thu operating week, not the Mon-start ISO week
   const tFilter = (x) => !tour || (x.Tournament || "AC27") === tour;
   const regT = reg.filter(tFilter), intakeT = intake.filter(tFilter), issuesT = issues.filter(tFilter);
-  const weekIntake = intakeT.filter((s) => isoWeek(new Date(s._created)) === week);
+  const weekIntake = intakeT.filter((s) => cycleWeek(new Date(s._created)) === week);
+  const weekIntakeAll = intake.filter((s) => cycleWeek(new Date(s._created)) === week);
   const kicker = tour ? (TOURS.find((x) => x.id === tour)?.kicker || t.kicker) : (CONFIG.progKicker || t.kicker);
   const valMap = useMemo(() => {
     const m = {};
@@ -197,11 +204,11 @@ export default function App({ mode = "all" }) {
             {view === "submit" && <SubmitView t={t} reg={regT} me={me} say={say} onDone={reload} tour={tour} />}
             {view === "mine" && <MineView t={t} intake={intakeT} me={me} reg={regT} />}
             {view === "pmo" && (!CONFIG.pmoGate?.enabled || pmoOk
-              ? <PMO t={t} reg={regT} intake={intakeT} intakeWeek={weekIntake} issues={issuesT} say={say} reload={reload} deep={deep} clearDeep={() => setDeep(null)} tour={tour} valMap={valMap} regAll={reg} />
+              ? <PMO t={t} reg={regT} intake={intakeT} intakeWeek={weekIntake} intakeWeekAll={weekIntakeAll} issues={issuesT} issuesAll={issues} say={say} reload={reload} deep={deep} clearDeep={() => setDeep(null)} tour={tour} valMap={valMap} regAll={reg} />
               : <GateCard t={t} onTry={tryUnlock} say={say} />)}
             {view === "fa" && <FAView t={t} reg={regT} me={me} say={say} reload={reload} valMap={valMap} />}
             {view === "exec" && (!CONFIG.pmoGate?.enabled || pmoOk
-              ? <ExecView t={t} reg={regT} regAll={reg} intake={weekIntake} issues={issuesT} onRefresh={reload} tour={tour} valMap={valMap} />
+              ? <ExecView t={t} reg={regT} regAll={reg} intake={weekIntake} issues={issuesT} issuesAll={issues} onRefresh={reload} tour={tour} valMap={valMap} />
               : <GateCard t={t} onTry={tryUnlock} say={say} />)}
             {view === "how" && <SOPView t={t} />}
           </>
@@ -480,7 +487,7 @@ function MineView({ t, intake, me, reg }) {
 }
 
 /* ── PMO console ── */
-function PMO({ t, reg, intake, intakeWeek, issues, say, reload, deep, clearDeep, tour, valMap, regAll }) {
+function PMO({ t, reg, intake, intakeWeek, intakeWeekAll, issues, issuesAll, say, reload, deep, clearDeep, tour, valMap, regAll }) {
   const [tab, setTab] = useState(deep ? "register" : "queue");
   const [reviewing, setReviewing] = useState(false);
   // The queue drains ALL pending intake, whatever week it arrived; weekly
@@ -503,7 +510,7 @@ function PMO({ t, reg, intake, intakeWeek, issues, say, reload, deep, clearDeep,
       {tab === "queue" && <Queue t={t} pending={pending} decided={wk.filter((s) => s.Status !== "Pending triage").length} reg={reg} regAll={regAll} say={say} reload={reload} />}
       {tab === "register" && <RegisterTab t={t} reg={reg} say={say} reload={reload} deep={deep} clearDeep={clearDeep} valMap={valMap} />}
       {tab === "issues" && <IssuesTab t={t} issues={issues} say={say} reload={reload} />}
-      {tab === "health" && <Health t={t} reg={reg} intake={wk} issues={issues} say={say} reload={reload}
+      {tab === "health" && <Health t={t} reg={reg} intake={wk} intakeWeekAll={intakeWeekAll || wk} issues={issues} issuesAll={issuesAll || issues} say={say} reload={reload}
         dueCount={rvQueue.length} onStartReview={() => setReviewing(true)} tour={tour} valMap={valMap} regAll={regAll} />}
     </>
   );
@@ -538,7 +545,9 @@ function Queue({ t, pending, decided, reg, regAll, say, reload }) {
             <div className="rowsplit">
               <div><div className="mini">{s.FunctionalArea} · {s.Confidential === "Yes" ? t.conf_chip : s.RaisedBy} · {s.EntryType === "Issue" ? t.typeIssue : t.typeRisk}{s.Confidential === "Yes" && <> <Chip bg={C.dim}>{t.conf_chip}</Chip></>}</div>
                 <div className="cardtitle">{s.Title}</div></div>
-              <Chip bg={RATE_C[rating(s.Likelihood * s.Impact)]}>{s.Likelihood * s.Impact} · {rateLabel(t, rating(s.Likelihood * s.Impact))}</Chip>
+              {s.Likelihood >= 1 && s.Impact >= 1
+                ? <Chip bg={RATE_C[rating(s.Likelihood * s.Impact)]}>{s.Likelihood * s.Impact} · {rateLabel(t, rating(s.Likelihood * s.Impact))}</Chip>
+                : <Chip bg={C.dim}>—</Chip>}
             </div>
             <p className="cec">{s.Cause ? s.Cause + " " : ""}<b>{s.EventClause}</b> {s.Consequence}</p>
             <div className="mini">{s.Category} · {s.Scope} · {s.Strategy} · {String(s.TargetDate || "").slice(0, 10)}</div>
@@ -818,26 +827,39 @@ function IssuesTab({ t, issues, say, reload }) {
 }
 
 /* ── Import screening — every migrated row gets a PMO verdict ── */
-function ImportReview({ t, rows, reg, say, onExit }) {
+function ImportReview({ t, rows, reg, issues, say, onExit }) {
   const [i, setI] = useState(0);
   const [admitted, setAdmitted] = useState([]);
+  const [loggedIss, setLoggedIss] = useState([]);
   const [nAdm, setNAdm] = useState(0);
   const [nSkip, setNSkip] = useState(0);
   const [ls, setLs] = useState(null);
   const [busy, setBusy] = useState(false);
   const existing = [...reg, ...admitted];
+  const existingIss = [...(issues || []), ...loggedIss];
   const next = () => { setI(i + 1); setLs(null); };
   const admitOne = async () => {
     if (busy) return;
     setBusy(true);
     const row = rows[i];
-    const cur = ls || { L: row.Likelihood || 3, I: row.Impact || 3 };
-    row.Likelihood = +cur.L; row.Impact = +cur.I; row.Score = +cur.L * +cur.I; row.Rating = rating(row.Score);
     try {
-      const res = await api.importRegister([row], existing);
-      if (res.imported) { setNAdm(nAdm + 1); say(fmt(t.ir_admitted, { id: row.RegisterID })); }
-      else { setNSkip(nSkip + 1); say(t.ir_dupskip, true); }
-      setAdmitted([...admitted, row]); next();
+      if (row.EntryType === "Issue") {
+        const res = await api.importIssues([row], existingIss);
+        // A create failure is NOT a duplicate — report it as a failure so the PMO retries.
+        if (res.imported) { setNAdm(nAdm + 1); say(fmt(t.t_logged, { id: row.IssueID })); }
+        else if (res.failed) { say(fmt(t.imp_err, { e: row.Title }), true); setBusy(false); return; }
+        else { setNSkip(nSkip + 1); say(t.ir_dupskip, true); }
+        setLoggedIss([...loggedIss, { Title: row.Title, Description: [row.EventClause, row.Consequence].filter(Boolean).join(" "), IssueID: row.IssueID || "" }]);
+      } else {
+        const cur = ls || { L: row.Likelihood || 3, I: row.Impact || 3 };
+        row.Likelihood = +cur.L; row.Impact = +cur.I; row.Score = +cur.L * +cur.I; row.Rating = rating(row.Score);
+        const res = await api.importRegister([row], existing);
+        if (res.imported) { setNAdm(nAdm + 1); say(fmt(t.ir_admitted, { id: row.RegisterID })); }
+        else if (res.failed) { say(fmt(t.imp_err, { e: row.Title }), true); setBusy(false); return; }
+        else { setNSkip(nSkip + 1); say(t.ir_dupskip, true); }
+        setAdmitted([...admitted, row]);
+      }
+      next();
     } catch (e) { say(`Failed — ${e.message}`, true); }
     setBusy(false);
   };
@@ -846,9 +868,20 @@ function ImportReview({ t, rows, reg, say, onExit }) {
     setBusy(true);
     try {
       const batch = rows.slice(i);
-      const res = await api.importRegister(batch, existing);
-      setNAdm(nAdm + res.imported); setNSkip(nSkip + res.skippedDup + res.skippedSim);
-      setAdmitted([...admitted, ...batch]); setI(rows.length);
+      const riskBatch = batch.filter((r) => r.EntryType !== "Issue");
+      const issBatch = batch.filter((r) => r.EntryType === "Issue");
+      let adm = 0, skip = 0, failed = 0;
+      if (riskBatch.length) {
+        const res = await api.importRegister(riskBatch, existing);
+        adm += res.imported; skip += res.skippedDup + res.skippedSim; failed += res.failed || 0;
+      }
+      if (issBatch.length) {
+        const ri = await api.importIssues(issBatch, existingIss);
+        adm += ri.imported; skip += ri.skippedSim; failed += ri.failed || 0;
+      }
+      if (failed) say(fmt(t.imp_fail, { n: failed }), true);
+      setNAdm(nAdm + adm); setNSkip(nSkip + skip);
+      setAdmitted([...admitted, ...riskBatch]); setI(rows.length);
     } catch (e) { say(`Failed — ${e.message}`, true); }
     setBusy(false);
   };
@@ -860,16 +893,21 @@ function ImportReview({ t, rows, reg, say, onExit }) {
     </div></Card>
   );
   const r = rows[i];
+  const isIssue = r.EntryType === "Issue";
   const cur = ls || { L: r.Likelihood || 3, I: r.Impact || 3 };
-  const dups = dupScreen(r.Title, r.EventClause, existing);
+  const dups = isIssue
+    ? existingIss.map((x) => ({ r: { RegisterID: x.IssueID || "—", Title: x.Title },
+        sc: sim(`${r.Title} ${r.EventClause || ""}`, `${x.Title} ${x.Description || ""}`) }))
+        .sort((a, b) => b.sc - a.sc).slice(0, 3).filter((d) => d.sc >= 45)
+    : dupScreen(r.Title, r.EventClause, existing);
   // Rule-based screening checks: evidence and directions, never the verdict.
   const top = dups[0];
   const checks = [];
   if (top && top.sc >= DUP_LIKELY) checks.push({ lv: "stop", tx: fmt(t.ir_c_dup, { id: top.r.RegisterID, sc: top.sc }) });
-  if (TASK_RE.test(r.EventClause || r.Title)) checks.push({ lv: "warn", tx: t.warn_task });
-  if (r.Category === "Safety & Security" && ["High", "Critical"].includes(rating(cur.L * cur.I))) checks.push({ lv: "warn", tx: t.ir_c_breach });
+  if (!isIssue && TASK_RE.test(r.EventClause || r.Title)) checks.push({ lv: "warn", tx: t.warn_task });
+  if (!isIssue && r.Category === "Safety & Security" && ["High", "Critical"].includes(rating(cur.L * cur.I))) checks.push({ lv: "warn", tx: t.ir_c_breach });
   if (r.LeadFA && !FAS.includes(r.LeadFA)) checks.push({ lv: "warn", tx: fmt(t.ir_c_fa, { fa: r.LeadFA }) });
-  if (!(r.Likelihood >= 1 && r.Impact >= 1)) checks.push({ lv: "warn", tx: t.ir_c_unscored });
+  if (!isIssue && !(r.Likelihood >= 1 && r.Impact >= 1)) checks.push({ lv: "warn", tx: t.ir_c_unscored });
   if (!r.TargetDate) checks.push({ lv: "warn", tx: t.g_target });
   else if (r.Status !== "Closed" && String(r.TargetDate).slice(0, 10) < todayISO()) checks.push({ lv: "warn", tx: t.g_past });
   if (r.Status === "Closed") checks.push({ lv: "note", tx: t.ir_c_closed });
@@ -886,7 +924,9 @@ function ImportReview({ t, rows, reg, say, onExit }) {
           <div><span className="cardtitle">{r.Title}</span>
             <div className="mini">{fmt(t.ir_meta, { fa: r.LeadFA || "—", o: r.RiskOwner || "—", st: statLabel(t, r.Status) })}
               {r.Tournament && <> <Chip bg={C.teal}>{r.Tournament}</Chip></>}</div></div>
-          <Chip bg={RATE_C[rating(cur.L * cur.I)]}>{cur.L * cur.I} · {rateLabel(t, rating(cur.L * cur.I))}</Chip>
+          {isIssue
+            ? <Chip bg={C.gold}>{t.typeIssue}</Chip>
+            : <Chip bg={RATE_C[rating(cur.L * cur.I)]}>{cur.L * cur.I} · {rateLabel(t, rating(cur.L * cur.I))}</Chip>}
         </div>
         <p className="cec"><b>{r.EventClause}</b> {r.Consequence}</p>
         {r.Category && <div className="mini">{r.Category}{r.ContributingFAs && <> · {t.r_with} {r.ContributingFAs}</>} · {String(r.TargetDate || "").slice(0, 10)}</div>}
@@ -903,16 +943,16 @@ function ImportReview({ t, rows, reg, say, onExit }) {
         </div>
         {dups.length > 0 && <div className="dupbox"><div className="slabel" style={{ color: C.gold }}>{t.q_matches}</div>
           {dups.map((d) => <div key={d.r.RegisterID || d.r.Title}><b>{d.r.RegisterID}</b> ({d.sc}) — {d.r.Title}</div>)}</div>}
-        <div className="row" style={{ margin: "10px 0" }}>
+        {!isIssue && <div className="row" style={{ margin: "10px 0" }}>
           <span className="flabel" style={{ marginBottom: 0 }}>{t.resc_label}</span>
           <select value={cur.L} onChange={(e) => setLs({ ...cur, L: e.target.value })} style={{ width: 64 }}>
             {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}</select>
           <span className="mini">×</span>
           <select value={cur.I} onChange={(e) => setLs({ ...cur, I: e.target.value })} style={{ width: 64 }}>
             {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}</select>
-        </div>
-        <div className="row">
-          <Btn disabled={busy} onClick={admitOne}>{t.ir_admit}</Btn>
+        </div>}
+        <div className="row" style={isIssue ? { marginTop: 10 } : {}}>
+          <Btn disabled={busy} onClick={admitOne}>{isIssue ? t.b_issue : t.ir_admit}</Btn>
           <Btn kind="quiet" disabled={busy} onClick={() => { setNSkip(nSkip + 1); next(); }}>{t.ir_skip}</Btn>
           <Btn kind="gold" disabled={busy} onClick={admitRest}>{fmt(t.ir_rest, { n: rows.length - i })}</Btn>
           <Btn kind="ghost" disabled={busy} onClick={onExit}>{t.rv_exit}</Btn>
@@ -923,10 +963,14 @@ function ImportReview({ t, rows, reg, say, onExit }) {
 }
 
 /* ── Health ── */
-function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, tour, valMap, regAll }) {
+function Health({ t, reg, intake, intakeWeekAll, issues, issuesAll, say, reload, dueCount, onStartReview, tour, valMap, regAll }) {
+  // ID minting and duplicate screens must see the WHOLE programme, not the
+  // tournament-filtered slice, or a GC27 import would reuse AC27 R-#### IDs.
+  const regFull = regAll || reg;
+  const issFull = issuesAll || issues;
   const fileRef = useRef(null);
   const [imp, setImp] = useState(null);
-  const [staged, setStaged] = useState(null); // { rows, nIss } awaiting guided/bulk choice
+  const [staged, setStaged] = useState(null); // { rows, issRows } awaiting guided/bulk choice
   const [screening, setScreening] = useState(false);
   const onFile = async (e) => {
     const file = e.target.files[0]; e.target.value = "";
@@ -936,26 +980,35 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
       // ExcelJS/xlsx load on demand — they stay out of the main bundle.
       const { parseRegisterFile } = await import("./excel.js");
       const { rows: allRows, report } = await parseRegisterFile(file);
-      // The register holds risks; issue-type rows are reported, not imported.
+      // Risks go to the register (screened); issue-type rows go to the Issues Log.
       const rows = allRows.filter((r) => r.EntryType !== "Issue");
-      const nIss = allRows.length - rows.length;
-      if (!rows.length) { setImp(fmt(t.imp_none, { r: report.notes[0] || "—" })); return; }
-      rows.forEach((r) => { if (!["AC27", "GC27"].includes(r.Tournament)) r.Tournament = tour || "AC27"; });
-      setStaged({ rows, nIss });
-      setImp(fmt(t.ir_found, { n: rows.length, i: nIss ? fmt(t.ir_found_iss, { n: nIss }) : "" }));
+      const issRows = allRows.filter((r) => r.EntryType === "Issue");
+      if (!rows.length && !issRows.length) { setImp(fmt(t.imp_none, { r: report.notes[0] || "—" })); return; }
+      allRows.forEach((r) => { if (!["AC27", "GC27"].includes(r.Tournament)) r.Tournament = tour || "AC27"; });
+      setStaged({ rows, issRows });
+      setImp(fmt(t.ir_found, { n: rows.length, i: issRows.length ? fmt(t.ir_found_iss, { n: issRows.length }) : "" }));
     } catch (err) { setImp(fmt(t.imp_err, { e: err.message })); }
+  };
+  const runIssues = async (issRows) => {
+    if (!issRows.length) return null;
+    const res = await api.importIssues(issRows, issFull, (i, n) => setImp(fmt(t.imp_ing, { i, t: n })));
+    return res;
   };
   const runBulk = async () => {
-    const { rows, nIss } = staged; setStaged(null);
+    const { rows, issRows } = staged;
     try {
-      const res = await api.importRegister(rows, reg, (i, n) => setImp(fmt(t.imp_ing, { i, t: n })));
+      const res = rows.length ? await api.importRegister(rows, regFull, (i, n) => setImp(fmt(t.imp_ing, { i, t: n })))
+        : { imported: 0, skippedDup: 0, skippedSim: 0, assignedIds: 0, failed: 0 };
+      const ri = await runIssues(issRows);
+      setStaged(null); // only after success — a failed import stays staged for retry
       setImp(fmt(t.imp_done, { a: res.imported, b: res.skippedDup,
         c: (res.skippedSim ? fmt(t.imp_sim, { n: res.skippedSim }) : "") + (res.assignedIds ? fmt(t.imp_ids, { n: res.assignedIds }) : ""),
-        d: (res.failed ? fmt(t.imp_fail, { n: res.failed }) : "") + (nIss ? " " + fmt(t.imp_issues, { n: nIss }) : "") }));
-      say(fmt(t.imp_toast, { n: res.imported })); reload();
+        d: (res.failed ? fmt(t.imp_fail, { n: res.failed }) : "")
+          + (ri ? " " + fmt(t.imp_issues, { n: ri.imported }) + (ri.skippedSim ? fmt(t.imp_sim, { n: ri.skippedSim }) : "") : "") }));
+      say(fmt(t.imp_toast, { n: res.imported + (ri ? ri.imported : 0) })); reload();
     } catch (err) { setImp(fmt(t.imp_err, { e: err.message })); }
   };
-  if (screening && staged) return <ImportReview t={t} rows={staged.rows} reg={reg} say={say}
+  if (screening && staged) return <ImportReview t={t} rows={[...staged.rows, ...staged.issRows]} reg={regFull} issues={issFull} say={say}
     onExit={() => { setScreening(false); setStaged(null); setImp(null); reload(); }} />;
   const open = reg.filter((r) => r.Status !== "Closed");
   const byRate = {}; open.forEach((r) => (byRate[r.Rating] = (byRate[r.Rating] || 0) + 1));
@@ -978,13 +1031,13 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
     const nr = (k) => openA.filter((r) => r.Rating === k).length;
     const inC = openA.length - dA.length - fA.length;
     try {
-      await api.captureKpi(isoWeek(), {
+      await api.captureKpi(cycleWeek(), {
         OpenTotal: openA.length, CriticalN: nr("Critical"), HighN: nr("High"), MediumN: nr("Medium"), LowN: nr("Low"),
         ReviewedPct: openA.length ? Math.round((100 * inC) / openA.length) : 100,
         ForgottenN: fA.length, EscalatedN: openA.filter((r) => r.Status === "Escalated").length,
-        IssuesOpen: issues.filter((i) => i.Status === "Open").length,
+        IssuesOpen: issFull.filter((i) => i.Status === "Open").length, // programme-wide, like every other KPI
       });
-      say(fmt(t.cap_done, { w: isoWeek() }));
+      say(fmt(t.cap_done, { w: cycleWeek() }));
     } catch (e) { say(`Failed — ${e.message}`, true); }
   };
   const KPI = ({ label, value, ok }) => (
@@ -999,12 +1052,13 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
       id: z.RegisterID, title: z.Title, rating: z.Rating, ratingLabel: rateLabel(t, z.Rating),
       days: ageDays(z.LastReviewed), forgotten: forgotten.includes(z),
     }));
-    const submitted = new Set(intake.map((s) => s.FunctionalArea).filter(Boolean));
+    // Participation is FA compliance — programme-wide even when the register view is filtered.
+    const submitted = new Set((intakeWeekAll || intake).map((s) => s.FunctionalArea).filter(Boolean));
     const openAll = reg.filter((r) => r.Status !== "Closed");
     const pendVal = openAll.filter((r) => favOf(r, valMap)?.st === "Pending validation").length;
     const flagged = openAll.filter((r) => favOf(r, valMap)?.st === "Flagged").length;
     const html = buildWeeklyReport({
-      week: isoWeek(),
+      week: cycleWeek(),
       kicker: tour ? (TOURS.find((x) => x.id === tour)?.kicker || t.kicker) : (CONFIG.progKicker || t.kicker),
       scopeLabel: tour || t.tour_all,
       generated: todayISO(),
@@ -1020,7 +1074,7 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
     }, t, t === STR.ar ? "rtl" : "ltr");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    a.download = `weekly_summary_${isoWeek()}.html`; a.click();
+    a.download = `weekly_summary_${cycleWeek()}.html`; a.click();
   };
   return (
     <>
@@ -1039,7 +1093,7 @@ function Health({ t, reg, intake, issues, say, reload, dueCount, onStartReview, 
           <b style={{ color: forgotten.includes(r) ? C.crit : C.high }}>{forgotten.includes(r) ? t.h_forgot : t.h_due}</b> — {r.RegisterID} ({rateLabel(t, r.Rating)}) {r.Title} · {ageDays(r.LastReviewed)}d</div>)}
       </div></Card>
       <div className="fhint" style={{ marginBottom: 8 }}>{fmt(t.k_subst, { p: substPct })}</div>
-      <Participation t={t} reg={reg} intake={intake} say={say} valMap={valMap} />
+      <Participation t={t} reg={reg} intake={intakeWeekAll || intake} say={say} valMap={valMap} />
       <Card accent={hygiene.length ? C.gold : C.green}><div className="pad">
         <div className="slabel">{t.hy_title}</div>
         {!hygiene.length ? <div className="dim" style={{ fontSize: 13 }}>{t.hy_ok}</div> : (
@@ -1110,7 +1164,7 @@ function TrendChart({ t, data }) {
 }
 
 /* ── Executive view ── */
-function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour, valMap }) {
+function ExecView({ t, reg, regAll, intake, issues, issuesAll, onRefresh, tour, valMap }) {
   const [city, setCity] = useState("");
   const [sel, setSel] = useState(null);
   const [kpi, setKpi] = useState([]);
@@ -1137,22 +1191,25 @@ function ExecView({ t, reg, regAll, intake, issues, onRefresh, tour, valMap }) {
     return m ? ageDays(m[m.length - 1].slice(0, 10)) <= 7 : false;
   }).length;
 
-  // capture weekly KPI snapshot — programme-wide (all tournaments), deduped per week
+  // capture weekly KPI snapshot — programme-wide (all tournaments), deduped per cycle week.
+  // The trend loads even when the register is still empty (fresh deployment);
+  // only the capture itself waits for data.
   useEffect(() => {
-    if (captured.current || !(regAll || []).length) return;
+    if (captured.current) return;
     captured.current = true;
+    const loadTrend = () => api.listKpi().then((rows) => setKpi(rows.sort((a, b) => (a.Title < b.Title ? -1 : 1)).slice(-8))).catch(() => {});
+    if (!(regAll || []).length) { loadTrend(); return; }
     const openA = regAll.filter((r) => r.Status !== "Closed");
     const { due: dA, forgotten: fA } = splitDue(regAll);
     const nr = (k) => openA.filter((r) => r.Rating === k).length;
     const inC = openA.length - dA.length - fA.length;
-    api.captureKpi(isoWeek(), {
+    api.captureKpi(cycleWeek(), {
       OpenTotal: openA.length, CriticalN: nr("Critical"), HighN: nr("High"), MediumN: nr("Medium"), LowN: nr("Low"),
       ReviewedPct: openA.length ? Math.round((100 * inC) / openA.length) : 100,
       ForgottenN: fA.length, EscalatedN: openA.filter((r) => r.Status === "Escalated").length,
-      IssuesOpen: issues.filter((i) => i.Status === "Open").length,
-    }).then(() => api.listKpi()).then((rows) => setKpi(rows.sort((a, b) => (a.Title < b.Title ? -1 : 1)).slice(-8)))
-      .catch(() => {});
-  }, [regAll, issues]);
+      IssuesOpen: (issuesAll || issues).filter((i) => i.Status === "Open").length,
+    }).then(loadTrend).catch(() => {});
+  }, [regAll, issues, issuesAll]);
 
   const heat = {};
   open.forEach((r) => { if (r.Likelihood >= 1 && r.Impact >= 1) { const k = `${r.Likelihood}-${r.Impact}`; heat[k] = (heat[k] || 0) + 1; } });

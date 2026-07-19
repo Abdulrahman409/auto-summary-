@@ -44,7 +44,7 @@ const LISTS = [
   ]},
   { name: CONFIG.lists.register, cols: [
     ["RegisterID", { indexed: true, enforceUniqueValues: true, ...txt() }],
-    ["Tournament", choice("AC27", "GC27")], ["Tournament", choice("AC27", "GC27")],
+    ["Tournament", choice("AC27", "GC27")],
     ["Cause", note(2)], ["EventClause", note(2)], ["Consequence", note(2)],
     ["LeadFA", txt()], ["ContributingFAs", note(2)], ["Category", txt()], ["Scope", choice(...SCOPE_CH)],
     ["Likelihood", num()], ["Impact", num()], ["Rating", choice(...RATING_CH)],
@@ -80,7 +80,7 @@ const LISTS = [
 
 const FINISH = [
   `CONFIDENTIALITY (do this one first) — Risk Intake → List settings → Advanced settings → Item-level Permissions: Read access = "Read items that were created by the user"; Create and Edit = "Create items and edit items that were created by the user". FAs then cannot see each other's submissions; PMO (Manage Lists rights) still sees everything. This is the platform-level guarantee behind the app's Confidential toggle.`,
-  `Risk Register → column "History" → column settings → set "Append changes to existing text" = Yes (turn list versioning ON first: List settings → Versioning settings → Create a version each time = Yes). 30 seconds — makes the audit trail append-only.`,
+  `Risk Register → List settings → Versioning settings → "Create a version each time" = Yes. Every edit is then recoverable from version history — the platform audit behind the app's append-only History column. (Do NOT set the History column's "Append changes to existing text": the app writes the full trail on each update, and that setting would duplicate it into every version.)`,
   `Risk Intake → List settings → Validation settings → paste formula: =AND(LEN([EventClause])>=15,LEN([Consequence])>=15) with message "Event and impact must each be a full clause." — this is the gate at the SharePoint door for anyone bypassing the app.`,
   `FA Champions list: add one row per FA — Title = FA name (exactly as in the app dropdown), ChampionName, ChampionEmail. This powers weekly reminder emails and the participation panel.`,
   `Permissions: FA champions = Contribute on Risk Intake AND on FA Validations (their validation channel — they never write the register itself), Read on Risk Register. PMO Risk = Edit on all four lists. (Site settings → Site permissions, or per-list.)`,
