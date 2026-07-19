@@ -3,12 +3,23 @@ export const CADENCE = { Critical: 7, High: 7, Medium: 30, Low: 30 };
 export const ZGRACE = 14, DUP_LIKELY = 70, DUP_POSSIBLE = 45;
 export const rating = (s) => (s >= 16 ? "Critical" : s >= 10 ? "High" : s >= 5 ? "Medium" : "Low");
 export const pad4 = (n) => String(n).padStart(4, "0");
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+// Local date, not UTC: between 00:00 and 03:00 Riyadh time toISOString() is
+// still on yesterday, which would misdate History lines and review stamps.
+export const todayISO = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const isoWeek = (d = new Date()) => {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
   const y = t.getUTCFullYear();
   return `${y}-W${String(Math.ceil(((t - Date.UTC(y, 0, 1)) / 864e5 + 1) / 7)).padStart(2, "0")}`;
+};
+// The operating cycle runs Sun–Thu, but ISO weeks run Mon–Sun — a Sunday-gate
+// submission would land in the PREVIOUS ISO week and vanish from "this week"
+// by Tuesday adjudication. Shifting one day forward puts Sunday at the head
+// of its cycle; all weekly stats, participation and KPI keys use this.
+export const cycleWeek = (d = new Date()) => {
+  const t = new Date(d); t.setDate(t.getDate() + 1);
+  return isoWeek(t);
 };
 export const ageDays = (iso) => (iso ? Math.floor((new Date(todayISO()) - new Date(String(iso).slice(0,10))) / 864e5) : 999);
 const STOP = new Set(("the a an of to in on at for and or that this is are be there risk may could might will " +

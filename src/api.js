@@ -57,6 +57,11 @@ const patchItem = async (listName, id, fields) => {
   const sid = await site();
   return call("PATCH", `${GRAPH}/sites/${sid}/lists/${encodeURIComponent(listName)}/items/${id}/fields`, fields);
 };
+const getFields = async (listName, id) => {
+  const sid = await site();
+  const d = await call("GET", `${GRAPH}/sites/${sid}/lists/${encodeURIComponent(listName)}/items/${id}?expand=fields`);
+  return d.fields || {};
+};
 const dt = (iso) => (iso ? `${String(iso).slice(0, 10)}T00:00:00Z` : null);
 const sendMailRaw = (to, subject, content) => call("POST", `${GRAPH}/me/sendMail`,
   { message: { subject, body: { contentType: "Text", content }, toRecipients: [{ emailAddress: { address: to } }] }, saveToSentItems: true });
@@ -120,14 +125,18 @@ export const graphApi = {
     if (decision === "Merge") {
       const t = registerRows.find((r) => r.RegisterID === target);
       if (!t) throw new Error(`Merge target ${target || "—"} not found in register`);
-      const contrib = String(t.ContributingFAs || "");
+      // Re-read the target so appends build on what the server holds NOW —
+      // a second PMO session may have written since this browser loaded.
+      let cur = t;
+      try { cur = await getFields(CONFIG.lists.register, t._id); } catch {}
+      const contrib = String(cur.ContributingFAs ?? t.ContributingFAs ?? "");
       await patchItem(CONFIG.lists.register, t._id, {
         ContributingFAs: sub.FunctionalArea !== t.LeadFA && !contrib.includes(sub.FunctionalArea)
           ? [contrib, sub.FunctionalArea].filter(Boolean).join("; ") : contrib,
-        SourceRefs: [t.SourceRefs, conf ? `Confidential #${sub._id}` : `${sub.FunctionalArea} #${sub._id}`].filter(Boolean).join("; "),
+        SourceRefs: [cur.SourceRefs ?? t.SourceRefs, conf ? `Confidential #${sub._id}` : `${sub.FunctionalArea} #${sub._id}`].filter(Boolean).join("; "),
         LastReviewed: dt(todayISO()),
         // History is append-only: keep the existing trail, add a dated line.
-        History: [t.History, `${today}: ` + (conf ? `merged confidential intake #${sub._id}` : `merged intake #${sub._id} from ${sub.FunctionalArea}`)].filter(Boolean).join("\n"),
+        History: [cur.History ?? t.History, `${today}: ` + (conf ? `merged confidential intake #${sub._id}` : `merged intake #${sub._id} from ${sub.FunctionalArea}`)].filter(Boolean).join("\n"),
       });
       await patchItem(CONFIG.lists.intake, sub._id, { Decision: "Merge", Status: "Merged", MergeInto: target, RegisterID: target, TriageNotes: note });
       return { target };
@@ -178,18 +187,24 @@ export const graphApi = {
       if (have.has(String(r.RegisterID).toUpperCase())) { skippedDup++; continue; }
       const rowTxt = `${r.Title} ${r.EventClause || ""}`;
       if (seenTxt.some((x) => sim(rowTxt, x) >= 82)) { skippedSim++; continue; }
+      // Zero-tolerance applies to migrated rows too: Safety & Security at
+      // High/Critical enters the register Escalated, exactly as at triage.
+      const rate = r.Likelihood >= 1 && r.Impact >= 1 ? rating(r.Likelihood * r.Impact) : "";
+      const breach = r.Category === "Safety & Security" && ["High", "Critical"].includes(rate) && r.Status !== "Closed";
       try {
         await createItem(CONFIG.lists.register, {
           Title: r.Title, RegisterID: r.RegisterID, Cause: r.Cause, EventClause: r.EventClause,
           Consequence: r.Consequence, LeadFA: r.LeadFA, ContributingFAs: r.ContributingFAs,
           Category: r.Category, Scope: r.Scope,
           ...(r.Likelihood && r.Impact ? { Likelihood: r.Likelihood, Impact: r.Impact } : {}),
+          ...(r.ResidualL && r.ResidualI ? { ResidualL: r.ResidualL, ResidualI: r.ResidualI } : {}),
           Strategy: r.Strategy, Actions: r.Actions, RiskOwner: r.RiskOwner,
-          TargetDate: dt(r.TargetDate), Status: r.Status,
+          TargetDate: dt(r.TargetDate), Status: breach ? "Escalated" : r.Status,
           DateRaised: dt(r.DateRaised || todayISO()), LastReviewed: dt(r.LastReviewed || todayISO()),
           CadenceDays: r.CadenceDays, SourceRefs: r.SourceRefs,
           MitigationUpdate: r.MitigationUpdate, Tournament: r.Tournament || "AC27",
-          History: (r.History ? r.History + "\n" : "") + `${todayISO()}: imported from Excel migration`,
+          History: (r.History ? r.History + "\n" : "") + `${todayISO()}: imported from Excel migration`
+            + (breach ? `\n${todayISO()}: auto-escalated — zero-tolerance category (Safety & Security ${rate})` : ""),
         });
         have.add(String(r.RegisterID).toUpperCase()); seenTxt.push(rowTxt); imported++;
       } catch { failed++; }
@@ -197,10 +212,15 @@ export const graphApi = {
     return { imported, skippedDup, skippedSim, failed, assignedIds };
   },
 
-  touchRisk: async (row, patch, histLine) =>
+  touchRisk: async (row, patch, histLine) => {
     // History is append-only: keep the existing trail, add a dated line.
-    patchItem(CONFIG.lists.register, row._id, { ...patch, LastReviewed: dt(todayISO()),
-      History: [row.History, `${todayISO()}: ${histLine}`].filter(Boolean).join("\n") }),
+    // Append to the server's CURRENT trail, not this browser's stale copy —
+    // otherwise two PMO sessions silently erase each other's lines.
+    let hist = row.History;
+    try { hist = (await getFields(CONFIG.lists.register, row._id)).History ?? hist; } catch {}
+    return patchItem(CONFIG.lists.register, row._id, { ...patch, LastReviewed: dt(todayISO()),
+      History: [hist, `${todayISO()}: ${histLine}`].filter(Boolean).join("\n") });
+  },
   listKpi: async () => { try { return await listAll(CONFIG.lists.kpi); } catch { return []; } },
   captureKpi: async (week, fields) => {
     try {
@@ -208,6 +228,29 @@ export const graphApi = {
       if (cur.find((k) => k.Title === week && (k.Tournament || "All") === (fields.Tournament || "All"))) return;
       await createItem(CONFIG.lists.kpi, { Title: week, ...fields });
     } catch { /* read-only viewers can't capture — fine */ }
+  },
+  // Issue-type rows from a register file land in the Issues Log (mirrored by mock).
+  importIssues: async (rows, existing, onProgress) => {
+    let mx = (existing || []).reduce((m, r) => Math.max(m, +String(r.IssueID || "").replace(/\D/g, "") || 0), 0);
+    const seenTxt = (existing || []).map((r) => `${r.Title} ${r.Description || ""}`);
+    let imported = 0, skippedSim = 0, failed = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]; onProgress && onProgress(i + 1, rows.length);
+      const desc = [r.EventClause, r.Consequence].filter(Boolean).join(" ");
+      const rowTxt = `${r.Title} ${desc}`;
+      if (seenTxt.some((x) => sim(rowTxt, x) >= 82)) { skippedSim++; continue; }
+      try {
+        r.IssueID = `I-${pad4(++mx)}`;
+        await createItem(CONFIG.lists.issues, {
+          Title: r.Title, IssueID: r.IssueID, FA: r.LeadFA || "", Description: desc,
+          ParentRiskID: "", IssueOwner: r.RiskOwner || "", RiskLevel: "", Tournament: r.Tournament || "AC27",
+          Status: r.Status === "Closed" ? "Closed" : "Open", TargetDate: dt(r.TargetDate),
+          SourceRef: r.SourceRefs || "Excel migration", IssueUpdate: r.MitigationUpdate || "",
+        });
+        seenTxt.push(rowTxt); imported++;
+      } catch { failed++; }
+    }
+    return { imported, skippedSim, failed };
   },
   closeIssue: async (row) => patchItem(CONFIG.lists.issues, row._id, { Status: "Closed" }),
   setIssueLevel: async (row, level) => patchItem(CONFIG.lists.issues, row._id, { RiskLevel: level }),
@@ -339,29 +382,42 @@ export const mockApi = {
       const mx = s.reg.reduce((m, r) => Math.max(m, +r.RegisterID.replace(/\D/g, "")), 0);
       const rid = `R-${pad4(mx + 1)}`; const rate = rating(sub.Likelihood * sub.Impact);
       const breach = sub.Category === "Safety & Security" && (rate === "High" || rate === "Critical");
-      s.reg.push({ ...sub, _id: `r${s.n++}`, RegisterID: rid, LeadFA: sub.FunctionalArea, ContributingFAs: "", RiskLevel: level, Tournament: sub.Tournament || "AC27",
-        RaisedBy: conf ? "Confidential" : sub.RaisedBy, SourceRefs: conf ? `Confidential #${sub._id}` : `${sub.FunctionalArea} #${sub._id}`,
+      // Register rows carry no intake-only fields (Confidential, EntryType, …) — mirror of the graph payload.
+      const { Confidential: _c, EntryType: _et, ProposedEscalation: _pe, Decision: _dc, TriageNotes: _tn,
+              RaisedBy: _rb, _created: _cr, _author: _au, _authorEmail: _ae, Status: _st, ...core } = sub;
+      s.reg.push({ ...core, _id: `r${s.n++}`, RegisterID: rid, LeadFA: sub.FunctionalArea, ContributingFAs: "", RiskLevel: level, Tournament: sub.Tournament || "AC27",
+        SourceRefs: conf ? `Confidential #${sub._id}` : `${sub.FunctionalArea} #${sub._id}`,
         Score: sub.Likelihood * sub.Impact, Rating: rate, RiskOwner: `${sub.FunctionalArea} — FA Risk Champion`,
         Status: breach ? "Escalated" : "Open", DateRaised: today, LastReviewed: today, CadenceDays: CADENCE[rate],
-        History: `${today}: admitted (demo)` + (breach ? ` · auto-escalated — zero-tolerance category` : "") });
+        History: (conf ? `${today}: admitted from confidential submission (intake #${sub._id})` : `${today}: admitted from ${sub.FunctionalArea} (intake #${sub._id})`)
+          + (breach ? `\n${today}: auto-escalated — zero-tolerance category (Safety & Security ${rate})` : "") });
       s.vals.push({ _id: `v${s.n++}`, _created: new Date().toISOString(), _author: "Demo user", Title: rid, FA: sub.FunctionalArea, Verdict: "Validated", ValNote: "self-raised" });
-      Object.assign(it, { Status: "Admitted", RegisterID: rid, TriageNotes: note }); return { riskId: rid, breach };
+      Object.assign(it, { Decision: "Admit", Status: "Admitted", RegisterID: rid, TriageNotes: note }); return { riskId: rid, breach };
     }
     if (decision === "Merge") {
       const t = s.reg.find((r) => r.RegisterID === target);
       if (!t) throw new Error(`Merge target ${target || "—"} not found`);
-      t.LastReviewed = today; t.SourceRefs += `; ${sub.FunctionalArea} #${sub._id}`;
-      Object.assign(it, { Status: "Merged", RegisterID: target, TriageNotes: note }); return { target };
+      // Mirror of the graph Merge: contributor credit, masked provenance, dated History line.
+      const contrib = String(t.ContributingFAs || "");
+      if (sub.FunctionalArea !== t.LeadFA && !contrib.includes(sub.FunctionalArea))
+        t.ContributingFAs = [contrib, sub.FunctionalArea].filter(Boolean).join("; ");
+      t.LastReviewed = today;
+      t.SourceRefs = [t.SourceRefs, conf ? `Confidential #${sub._id}` : `${sub.FunctionalArea} #${sub._id}`].filter(Boolean).join("; ");
+      t.History = [t.History, `${today}: ` + (conf ? `merged confidential intake #${sub._id}` : `merged intake #${sub._id} from ${sub.FunctionalArea}`)].filter(Boolean).join("\n");
+      Object.assign(it, { Decision: "Merge", Status: "Merged", MergeInto: target, RegisterID: target, TriageNotes: note }); return { target };
     }
     if (decision === "Convert-Issue") {
-      const iid = `I-${pad4(s.issues.length + 1)}`;
+      const mxI = s.issues.reduce((m, r) => Math.max(m, +String(r.IssueID || "").replace(/\D/g, "") || 0), 0);
+      const iid = `I-${pad4(mxI + 1)}`;
       s.issues.push({ _id: `i${s.n++}`, IssueID: iid, Title: sub.Title, FA: sub.FunctionalArea, RiskLevel: level, Tournament: sub.Tournament || "AC27",
         Description: `${sub.Cause} ${sub.EventClause} ${sub.Consequence}`, ParentRiskID: target,
-        IssueOwner: `${sub.FunctionalArea} — FA Risk Champion`, Status: "Open", TargetDate: sub.TargetDate, SourceRef: sub._id });
-      Object.assign(it, { Status: "Converted to issue", RegisterID: iid, TriageNotes: note }); return { issueId: iid };
+        IssueOwner: `${sub.FunctionalArea} — FA Risk Champion`, Status: "Open", TargetDate: sub.TargetDate, SourceRef: `intake #${sub._id}` });
+      Object.assign(it, { Decision: "Convert to issue", Status: "Converted to issue", RegisterID: iid, TriageNotes: note }); return { issueId: iid };
     }
     const map = { Return: "Returned", "Reject-NotRisk": "Rejected — not a risk", "Reject-Scope": "Rejected — out of scope" };
-    Object.assign(it, { Status: map[decision], TriageNotes: note });
+    Object.assign(it, {
+      Decision: decision === "Return" ? "Return" : decision === "Reject-NotRisk" ? "Reject — not a risk" : "Reject — out of scope",
+      Status: map[decision], TriageNotes: note });
     return decision === "Return" ? { mailed: "demo" } : {};
   },
 
@@ -378,9 +434,13 @@ export const mockApi = {
       if (have.has(String(r.RegisterID).toUpperCase())) { skippedDup++; continue; }
       const rowTxt = `${r.Title} ${r.EventClause || ""}`;
       if (seenTxt.some((x) => sim(rowTxt, x) >= 82)) { skippedSim++; continue; }
-      st.reg.push({ ...r, _id: `m${st.n++}`,
+      // Zero-tolerance applies to migrated rows too (mirror of graph import).
+      const rate = r.Likelihood >= 1 && r.Impact >= 1 ? rating(r.Likelihood * r.Impact) : "";
+      const breach = r.Category === "Safety & Security" && ["High", "Critical"].includes(rate) && r.Status !== "Closed";
+      st.reg.push({ ...r, _id: `m${st.n++}`, Status: breach ? "Escalated" : r.Status,
         LastReviewed: r.LastReviewed || todayISO(), DateRaised: r.DateRaised || todayISO(),
-        History: (r.History ? r.History + "\n" : "") + `${todayISO()}: imported from Excel migration` });
+        History: (r.History ? r.History + "\n" : "") + `${todayISO()}: imported from Excel migration`
+          + (breach ? `\n${todayISO()}: auto-escalated — zero-tolerance category (Safety & Security ${rate})` : "") });
       have.add(String(r.RegisterID).toUpperCase()); seenTxt.push(rowTxt); imported++;
     }
     return { imported, skippedDup, skippedSim, failed: 0, assignedIds };
@@ -397,6 +457,25 @@ export const mockApi = {
   captureKpi: async (week, fields) => {
     const st = demoInit();
     if (!st.kpi.find((k) => k.Title === week && (k.Tournament || "All") === (fields.Tournament || "All"))) st.kpi.push({ Title: week, ...fields });
+  },
+  importIssues: async (rows, existing, onProgress) => {
+    const st = demoInit();
+    let mx = st.issues.reduce((m, r) => Math.max(m, +String(r.IssueID || "").replace(/\D/g, "") || 0), 0);
+    const seenTxt = st.issues.map((r) => `${r.Title} ${r.Description || ""}`);
+    let imported = 0, skippedSim = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]; onProgress && onProgress(i + 1, rows.length);
+      const desc = [r.EventClause, r.Consequence].filter(Boolean).join(" ");
+      const rowTxt = `${r.Title} ${desc}`;
+      if (seenTxt.some((x) => sim(rowTxt, x) >= 82)) { skippedSim++; continue; }
+      r.IssueID = `I-${pad4(++mx)}`;
+      st.issues.push({ _id: `mi${st.n++}`, IssueID: r.IssueID, Title: r.Title, FA: r.LeadFA || "",
+        Description: desc, ParentRiskID: "", IssueOwner: r.RiskOwner || "", RiskLevel: "",
+        Tournament: r.Tournament || "AC27", Status: r.Status === "Closed" ? "Closed" : "Open",
+        TargetDate: r.TargetDate || "", SourceRef: r.SourceRefs || "Excel migration", IssueUpdate: r.MitigationUpdate || "" });
+      seenTxt.push(rowTxt); imported++;
+    }
+    return { imported, skippedSim, failed: 0 };
   },
   closeIssue: async (row) => { demoInit().issues.find((x) => x._id === row._id).Status = "Closed"; },
   setIssueLevel: async (row, level) => { demoInit().issues.find((x) => x._id === row._id).RiskLevel = level; },

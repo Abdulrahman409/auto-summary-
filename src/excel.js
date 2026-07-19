@@ -8,7 +8,20 @@ import { rating, todayISO, ageDays, ZGRACE, CADENCE, genTitle } from "./logic.js
 
 export const REG_COLS = ["Register ID","Tournament","Title","Cause","Event","Consequence","Lead FA","Contributing FAs","Category","City / Venue Scope","Likelihood","Impact","Score","Rating","Response Strategy","Response Actions","Risk Owner","Target Date","Status","Date Raised","Last Reviewed","Review Cadence (days)","Source Refs","Latest Mitigation Update","History","Residual L","Residual I"];
 
-const d10 = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v ? String(v).slice(0, 10) : "");
+// Date cells: SheetJS (cellDates) parses a plain date as local midnight minus
+// ~52s, and toISOString() would shift it a further day back in UTC+3. Nudge
+// past the epoch quirk, then read LOCAL components — never the UTC string.
+const d10 = (v) => {
+  if (v instanceof Date) {
+    const d = new Date(v.getTime() + 120000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return v ? String(v).slice(0, 10) : "";
+};
+// Off-platform copies must not carry the confidential provenance breadcrumb —
+// masking survives export (doctrine: the app masks, the platform audits).
+const pubRefs = (s) => String(s || "").split(";").map((x) => x.trim())
+  .map((x) => (/^Confidential #/i.test(x) ? "Confidential source" : x)).filter(Boolean).join("; ");
 
 const A = (h) => ({ argb: "FF" + h });
 const TEAL = "065C5D", GOLD = "C88214", TGREEN = "00937B", GREEN = "007542",
@@ -116,8 +129,8 @@ export const buildRegisterWorkbook = (rows, issues) => {
   rows.forEach((r, ri) => {
     const vals = [r.RegisterID, r.Tournament || "", r.Title, r.Cause, r.EventClause, r.Consequence, r.LeadFA, r.ContributingFAs,
       r.Category, r.Scope, r.Likelihood, r.Impact, r.Score, r.Rating, r.Strategy, r.Actions, r.RiskOwner,
-      d10(r.TargetDate), r.Status, d10(r.DateRaised), d10(r.LastReviewed), r.CadenceDays, r.SourceRefs,
-      r.MitigationUpdate || "", r.History];
+      d10(r.TargetDate), r.Status, d10(r.DateRaised), d10(r.LastReviewed), r.CadenceDays, pubRefs(r.SourceRefs),
+      r.MitigationUpdate || "", r.History, r.ResidualL || "", r.ResidualI || ""];
     const row = ws.getRow(5 + ri);
     vals.forEach((v, ci) => {
       const c = row.getCell(ci + 1);
@@ -202,6 +215,8 @@ const ALIAS = {
   SourceRefs: ["sourcerefs","source","references","origin","\u0627\u0644\u0645\u0635\u062f\u0631","\u0627\u0644\u0645\u0635\u0627\u062f\u0631","\u0627\u0644\u0645\u0631\u062c\u0639\u064a\u0629"],
   MitigationUpdate: ["latestmitigationupdate","mitigationupdate","latestupdate","progressupdate","statusupdate","progress","update","\u0627\u0644\u062a\u062d\u062f\u064a\u062b","\u0627\u062e\u0631\u0645\u0633\u062a\u062c\u062f\u0627\u062a","\u0622\u062e\u0631\u0645\u0633\u062a\u062c\u062f\u0627\u062a","\u062a\u062d\u062f\u064a\u062b\u0627\u0644\u0645\u0639\u0627\u0644\u062c\u0629","\u0627\u062e\u0631\u062a\u062d\u062f\u064a\u062b\u0644\u0644\u0645\u0639\u0627\u0644\u062c\u0629"],
   History: ["history","log","auditlog","comments","notes","\u0627\u0644\u0633\u062c\u0644","\u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a","\u0627\u0644\u062a\u0627\u0631\u064a\u062e"],
+  ResidualL: ["residuall","residuallikelihood","residualprob","\u0627\u0644\u0627\u062d\u062a\u0645\u0627\u0644\u064a\u0629\u0627\u0644\u0645\u062a\u0628\u0642\u064a\u0629"],
+  ResidualI: ["residuali","residualimpact","residualseverity","\u0627\u0644\u0623\u062b\u0631\u0627\u0644\u0645\u062a\u0628\u0642\u064a","\u0627\u0644\u0627\u062b\u0631\u0627\u0644\u0645\u062a\u0628\u0642\u064a"],
 };
 const norm = (h) => String(h || "").toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, "");
 const RATE_WORDS = { critical: "Critical", veryhigh: "Critical", high: "High", medium: "Medium", med: "Medium", moderate: "Medium", low: "Low", verylow: "Low" };
