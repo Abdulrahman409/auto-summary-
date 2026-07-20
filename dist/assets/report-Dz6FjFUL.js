@@ -1,4 +1,4 @@
-import{B as e}from"./styles-DbzayWB7.js";const t=i=>String(i??"").replace(/[&<>"']/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[a]);function m(i,a,r){const n={Low:e.green,Medium:e.gold,High:e.high,Critical:e.crit},c=Math.max(1,...i.ratings.map(s=>s.n)),l=(s,p,d)=>`
+import{B as e}from"./styles-37AhaKHO.js";const t=i=>String(i??"").replace(/[&<>"']/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[a]);function m(i,a,r){const n={Low:e.green,Medium:e.gold,High:e.high,Critical:e.crit},c=Math.max(1,...i.ratings.map(s=>s.n)),l=(s,p,d)=>`
     <div class="tile" style="border-top-color:${d?e.crit:e.teal}">
       <div class="tnum" style="color:${d?e.crit:e.teal}">${t(p)}</div>
       <div class="tlabel">${t(s)}</div>
