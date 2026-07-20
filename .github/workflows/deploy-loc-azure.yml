@@ -1,0 +1,51 @@
+# Production deployment → LOC Azure Static Web App.
+#
+# Stays dormant until IT delivers the environment. To activate, add these
+# repository secrets (Settings → Secrets and variables → Actions):
+#   LOC_SWA_DEPLOY_TOKEN  — deployment token of the LOC Static Web App
+#   LOC_TENANT_ID         — Directory (tenant) ID from the Entra registration
+#   LOC_CLIENT_ID         — Application (client) ID from the Entra registration
+#   LOC_PMO_SHA256        — sha256 of the ROTATED PMO gate password (not the demo one)
+# then run it from the Actions tab (Run workflow). Once live, switch `on:` to
+# include pushes to main for automatic redeploys.
+#
+# The identity is injected at build time only here — the repo and every other
+# host keep placeholder config and therefore stay in sample-data demo mode.
+name: Deploy to LOC Azure (production)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Guard — refuse to deploy without production identity
+        run: |
+          if [ -z "${{ secrets.LOC_SWA_DEPLOY_TOKEN }}" ] || [ -z "${{ secrets.LOC_CLIENT_ID }}" ]; then
+            echo "::error::LOC secrets are not configured yet — see the comment at the top of this workflow."
+            exit 1
+          fi
+          if [ -z "${{ secrets.LOC_PMO_SHA256 }}" ]; then
+            echo "::error::Refusing to ship the demo PMO password to production. Set LOC_PMO_SHA256."
+            exit 1
+          fi
+      - name: Build with production identity
+        run: |
+          npm ci
+          npm run build
+        env:
+          VITE_TENANT_ID: ${{ secrets.LOC_TENANT_ID }}
+          VITE_CLIENT_ID: ${{ secrets.LOC_CLIENT_ID }}
+          VITE_PMO_SHA256: ${{ secrets.LOC_PMO_SHA256 }}
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.LOC_SWA_DEPLOY_TOKEN }}
+          action: upload
+          app_location: dist
+          skip_app_build: true

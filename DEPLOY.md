@@ -70,46 +70,57 @@ that file carries the SharePoint/Teams embedding headers.
 
 ---
 
-## Phase 2 — Production (after approval) — needs IT admin once
+## Phase 2 — Production in the LOC environment (approved) — IT once, in this order
 
-Do these in order. Steps 1 and 5 need your M365 admin; everything else is you.
+The order matters: **hosting first** (it fixes the production URL), **then** the
+Entra registration against that URL. IT's total effort is ~45 minutes.
 
-1. **Entra app registration** (IT admin, ~10 min):
+1. **IT — provision the LOC host (~10 min):** Azure Portal (LOC subscription) →
+   Create a resource → **Static Web App** → Free plan, nearest region, name e.g.
+   `loc-risk-console`, **Deployment source: Other**. Note the generated URL
+   (`https://<name>-<hash>.azurestaticapps.net`) and copy the **deployment token**
+   (Overview → Manage deployment token).
+
+2. **IT — Entra app registration (~10 min):**
    Microsoft Entra admin center → App registrations → New registration.
-   - Name: `AC27 Risk Console`; single tenant.
-   - Platform **SPA**; Redirect URI = the production hosting URL.
-   - API permissions (Microsoft Graph, **delegated**): `User.Read`,
-     `Sites.ReadWrite.All`, `Mail.Send` → **Grant admin consent** (one consent
-     covers all three).
-   - Note the **Directory (tenant) ID** and **Application (client) ID**.
+   - Name: `AC27 Risk Console`; **single tenant**.
+   - Platform **Single-page application (SPA)**; add redirect URIs — the SWA URL
+     from step 1 with each of: `/`, `/index.html`, `/fa.html`, `/pmo.html`,
+     `/exec.html`, `/setup.html`.
+   - API permissions (Microsoft Graph, **delegated** — no application permissions,
+     no client secrets): `User.Read`, `Sites.ReadWrite.All`, `Mail.Send` →
+     **Grant admin consent** (one consent covers all three).
 
-2. **Fill `src/config.js`:** `tenantId`, `clientId`, `spHostname`, `spSitePath`
-   (the SharePoint site that will hold the lists). Rotate the PMO gate hash here too.
+3. **IT — hand back three values** (deployment token ideally via a secure channel):
+   **Directory (tenant) ID** · **Application (client) ID** · **SWA URL + deployment
+   token**.
 
-3. **Build and host:** `npm install && npm run build`, then put `dist/` on a static
-   host that supports response headers — Netlify (drag the `dist` folder onto
-   app.netlify.com/drop) or Azure Static Web Apps. `_headers` /
-   `staticwebapp.config.json` already send `frame-ancestors *.sharepoint.com` so
-   SharePoint Embed will accept the app. (GitHub Pages cannot send those headers —
-   it is for the demo phase only.)
+4. **PMO — deploy:** the values go in as GitHub Actions secrets
+   (`LOC_TENANT_ID`, `LOC_CLIENT_ID`, `LOC_SWA_DEPLOY_TOKEN`, plus
+   `LOC_PMO_SHA256` for the rotated gate password) and the dormant
+   `.github/workflows/deploy-loc-azure.yml` workflow is run. Identity is injected
+   at build time only in that pipeline — the repo keeps placeholders, so the demo
+   hosts stay pure sample-data demos. `staticwebapp.config.json` already sends
+   `frame-ancestors *.sharepoint.com`, so SharePoint Embed accepts the app.
 
-4. **Provision the six lists:** open `setup.html` on the production URL, sign in,
-   click **Create the six lists**, then complete the printed finishing touches —
+5. **PMO — provision the six lists:** open `setup.html` on the production URL, sign
+   in, click **Create the six lists**, then complete the printed finishing touches —
    **item-level security on Risk Intake FIRST** (ReadSecurity=2, WriteSecurity=2).
 
-5. **Permissions** (site owner): FA champions = **Contribute** on *Risk Intake* +
+6. **Permissions** (site owner): FA champions = **Contribute** on *Risk Intake* +
    *FA Validations*, **Read** on *Risk Register*; PMO team = **Edit** everywhere.
    Fill the *FA Champions* list (Title must match the FA dropdown text exactly).
 
-6. **Three embeds:** SharePoint Embed web part → `fa.html` on the FA page,
+7. **Three embeds:** SharePoint Embed web part → `fa.html` on the FA page,
    `exec.html` on the leadership page, `pmo.html` on the PMO team page.
 
-7. **Run the 10-point smoke test below.**
+8. **Run the 10-point smoke test below.**
 
-8. **Import the real register** (~727 rows) via PMO → Health → Import, then announce
+9. **Import the real register** (~727 rows) via PMO → Health → Import, then announce
    with amnesty framing ("week one is baseline, not judgment").
 
-9. **Name a PMO deputy** — share the rotated gate password and grant list permissions.
+10. **Name a PMO deputy** — share the rotated gate password and grant list
+    permissions.
 
 ## 10-point production smoke test
 

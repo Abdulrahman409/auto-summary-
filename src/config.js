@@ -1,10 +1,15 @@
 // ── APP-RSK-01 configuration — the only file you edit ─────────────────
 // Demo mode: open the app with ?demo=1 to run on in-memory sample data,
 // no Entra registration and no SharePoint needed. Remove for production.
+// Production identity arrives as BUILD-TIME environment variables set only in
+// the LOC deployment pipeline (VITE_TENANT_ID / VITE_CLIENT_ID / VITE_PMO_SHA256).
+// The repo keeps placeholders, so every other host (GitHub Pages, the evaluation
+// Azure site, local builds) stays a pure sample-data demo.
+const env = (typeof import.meta !== "undefined" && import.meta.env) || {};
 export const CONFIG = {
   // Entra ID (Azure AD) app registration — SPA platform
-  tenantId: "YOUR-TENANT-ID",          // Directory (tenant) ID
-  clientId: "YOUR-CLIENT-ID",          // Application (client) ID
+  tenantId: env.VITE_TENANT_ID || "YOUR-TENANT-ID",   // Directory (tenant) ID
+  clientId: env.VITE_CLIENT_ID || "YOUR-CLIENT-ID",   // Application (client) ID
   // SharePoint site hosting the PLT-RSK-01 lists (Central Planning Hub)
   spHostname: "asiancup2027.sharepoint.com",
   spSitePath: "/sites/centralplanninghub", // site containing the six lists
@@ -17,8 +22,10 @@ export const CONFIG = {
   progKicker: "AC27 · GC27 Tournament Programme · Local Organising Committee",
   scopes: ["User.Read", "Sites.ReadWrite.All", "Mail.Send"],  // delegated; ReadWrite needs admin consent
   // PMO triage gate — SHA-256 of the team password (no plaintext stored).
-  // To change: open the app, press F12, type  pmoHash("NewPassword")  and paste the result here.
-  pmoGate: { enabled: true, sha256: "b3d1d27c52bf6e4005fec2d2a0224d3acd0cc710fdb31052ac5c954aac3c1e48" },
+  // Production hash comes from the pipeline (VITE_PMO_SHA256); the default below
+  // is the demo password PMO@AC27 and must never reach the LOC deployment.
+  // To compute a hash: open the app, press F12, type  pmoHash("NewPassword").
+  pmoGate: { enabled: true, sha256: env.VITE_PMO_SHA256 || "b3d1d27c52bf6e4005fec2d2a0224d3acd0cc710fdb31052ac5c954aac3c1e48" },
 };
 export const BRAND = {
   teal:"#065C5D", tealDark:"#04393A", tgreen:"#00937B", green:"#007542",
