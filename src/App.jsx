@@ -278,8 +278,8 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
   const [f, setF] = useState(blank);
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
-  // File upload removed from the FA surface by decision: legacy registers are
-  // migrated by PMO only (Health → Upload), where every row is screened.
+  // No file upload on the FA surface — an IT requirement for the LOC migration.
+  // Legacy registers are migrated by PMO only (Health → Upload), screened row by row.
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const score = f.L && f.I ? +f.L * +f.I : null;
   const dups = useMemo(() => f.event.length < 14 ? [] : dupScreen(genTitle(f.event), f.event, reg), [f.event, reg]);

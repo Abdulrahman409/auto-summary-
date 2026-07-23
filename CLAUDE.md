@@ -21,7 +21,9 @@ runway" below.
    scoring suggestions, or auto-triage. PMO judgment is the product; the app is its rails.
 2. **Permanently OFF** (do not build even if it seems helpful): leaderboards/gamification,
    dependency/interdependency graphs, comment threads. (Portfolio analytics belongs to a
-   future WeTrack handoff — don't fight it.)
+   future WeTrack handoff — don't fight it.) Also OFF **at IT's request** (condition of
+   the LOC migration): file upload on the FA surface — legacy registers enter through
+   PMO → Health → Upload only, screened row by row. Do not re-add.
 3. **FAs never write the Risk Register.** Champion validation verdicts go to the separate
    *FA Validations* list; the app derives validation state (latest verdict per RegisterID,
    no row + open = "Pending validation"). This is a permission-model invariant.
