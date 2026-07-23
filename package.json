@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@azure/msal-browser": "^3.20.0",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
     "exceljs": "^4.4.0",
     "js-sha256": "^0.11.1",
     "react": "^18.3.1",
@@ -17,8 +20,9 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^6.0.4",
+    "esbuild": "^0.28.1",
+    "vite": "^8.1.5",
     "vite-plugin-singlefile": "^2.3.3"
   }
 }

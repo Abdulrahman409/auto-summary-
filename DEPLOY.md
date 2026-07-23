@@ -103,23 +103,29 @@ Entra registration against that URL. IT's total effort is ~45 minutes.
    hosts stay pure sample-data demos. `staticwebapp.config.json` already sends
    `frame-ancestors *.sharepoint.com`, so SharePoint Embed accepts the app.
 
-5. **PMO — provision the six lists:** open `setup.html` on the production URL, sign
+5. **Cybersecurity review & approval** — required before production per IT
+   direction. The review dossier (SEC-RSK-01) covers architecture, identity,
+   data residency, supply chain and residual risks. The deployed-but-unlaunched
+   app (no lists yet, no embeds) is available for their inspection; nothing is
+   announced or embedded until they approve.
+
+6. **PMO — provision the six lists:** open `setup.html` on the production URL, sign
    in, click **Create the six lists**, then complete the printed finishing touches —
    **item-level security on Risk Intake FIRST** (ReadSecurity=2, WriteSecurity=2).
 
-6. **Permissions** (site owner): FA champions = **Contribute** on *Risk Intake* +
+7. **Permissions** (site owner): FA champions = **Contribute** on *Risk Intake* +
    *FA Validations*, **Read** on *Risk Register*; PMO team = **Edit** everywhere.
    Fill the *FA Champions* list (Title must match the FA dropdown text exactly).
 
-7. **Three embeds:** SharePoint Embed web part → `fa.html` on the FA page,
+8. **Three embeds:** SharePoint Embed web part → `fa.html` on the FA page,
    `exec.html` on the leadership page, `pmo.html` on the PMO team page.
 
-8. **Run the 10-point smoke test below.**
+9. **Run the 10-point smoke test below.**
 
-9. **Import the real register** (~727 rows) via PMO → Health → Import, then announce
+10. **Import the real register** (~727 rows) via PMO → Health → Import, then announce
    with amnesty framing ("week one is baseline, not judgment").
 
-10. **Name a PMO deputy** — share the rotated gate password and grant list
+11. **Name a PMO deputy** — share the rotated gate password and grant list
     permissions.
 
 ## 10-point production smoke test
