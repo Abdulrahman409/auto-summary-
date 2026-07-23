@@ -4,6 +4,13 @@
 // self-deployment. Safe to re-run: existing lists and columns are skipped.
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
+// Self-hosted brand fonts — no external requests (see main.jsx note).
+import "@fontsource/barlow/400.css";
+import "@fontsource/barlow/600.css";
+import "@fontsource/barlow/700.css";
+import "@fontsource/barlow-condensed/600.css";
+import "@fontsource/ibm-plex-sans-arabic/400.css";
+import "@fontsource/ibm-plex-sans-arabic/600.css";
 import { CONFIG, BRAND as C } from "./config.js";
 import { initAuth, signIn, getToken } from "./auth.js";
 import "./styles.css";

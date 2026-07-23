@@ -34,9 +34,9 @@ export function buildWeeklyReport(d, t, dir) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(t.rep_title)} — ${esc(d.week)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Standalone file, no external requests: brand fonts render when installed
+     or when opened by someone who has visited the console; system-ui otherwise. */
   :root { color-scheme: light; }
   * { box-sizing: border-box; margin: 0; }
   body { font-family: ${dir === "rtl" ? "'IBM Plex Sans Arabic'," : ""} 'Barlow', system-ui, sans-serif;
