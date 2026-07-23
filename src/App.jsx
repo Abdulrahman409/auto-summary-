@@ -278,53 +278,8 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
   const [f, setF] = useState(blank);
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Legacy register upload: rows become INTAKE submissions (pending triage),
-  // never register rows — FAs cannot write the register (doctrine).
-  const LEG_CAP = 100;
-  const legRef = useRef(null);
-  const [leg, setLeg] = useState(null);
-  const onLegacy = async (e) => {
-    const file = e.target.files[0]; e.target.value = "";
-    if (!file) return;
-    setLeg({ phase: "read" });
-    try {
-      const { parseRegisterFile } = await import("./excel.js");
-      const { rows } = await parseRegisterFile(file);
-      let skipped = 0; const usable = [];
-      const byLine = (lsv("myName") || lsv("myEmail") || me?.name || "FA champion") + " — legacy file";
-      rows.forEach((r) => {
-        const event = String(r.EventClause || r.Title || "").trim();
-        const cons = String(r.Consequence || "").trim();
-        if (event.length < 15 || cons.length < 15) { skipped++; return; }
-        usable.push({
-          title: genTitle(event) || String(r.Title || "").slice(0, 72),
-          fa: FAS.includes(r.LeadFA) ? r.LeadFA : (f.fa || lsv("myFA")),
-          by: byLine, type: r.EntryType === "Issue" ? "Issue" : "Risk", cause: r.Cause || "",
-          event, consequence: cons,
-          cat: CATS.includes(r.Category) ? r.Category : "Operational Delivery",
-          scope: SCOPES.includes(r.Scope) ? r.Scope : "Tournament-wide",
-          L: r.Likelihood >= 1 && r.Likelihood <= 5 ? r.Likelihood : 3,
-          I: r.Impact >= 1 && r.Impact <= 5 ? r.Impact : 3,
-          strat: STRATS.includes(r.Strategy) ? r.Strategy : "Reduce",
-          actions: String(r.Actions || "").trim() || "Per legacy register.",
-          target: String(r.TargetDate || todayISO()).slice(0, 10),
-          conf: false, tour: ["AC27", "GC27"].includes(r.Tournament) ? r.Tournament : (tour || "AC27"),
-        });
-      });
-      if (!usable.length) { setLeg({ phase: "none" }); return; }
-      setLeg({ phase: "preview", rows: usable.slice(0, LEG_CAP), skipped, capped: usable.length > LEG_CAP });
-    } catch (err) { say(`Failed — ${err.message}`, true); setLeg(null); }
-  };
-  const sendLegacy = async () => {
-    const rows = leg.rows;
-    for (let i = 0; i < rows.length; i++) {
-      setLeg({ phase: "prog", i: i + 1, n: rows.length });
-      try { await api.createIntake(rows[i]); }
-      catch (err) { say(`Failed — ${err.message}`, true); setLeg(null); return; }
-    }
-    say(fmt(t.si_done, { n: rows.length }));
-    setLeg(null); onDone();
-  };
+  // File upload removed from the FA surface by decision: legacy registers are
+  // migrated by PMO only (Health → Upload), where every row is screened.
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const score = f.L && f.I ? +f.L * +f.I : null;
   const dups = useMemo(() => f.event.length < 14 ? [] : dupScreen(genTitle(f.event), f.event, reg), [f.event, reg]);
@@ -431,27 +386,6 @@ function SubmitView({ t, reg, me, say, onDone, tour }) {
           {!ready && <span className="fhint">{t.needAll}</span>}
         </div>
         <div className="fhint" style={{ marginTop: 8 }}>{t.conf_note}</div>
-      </div></Card>
-
-      <Card accent={C.gold}><div className="pad">
-        <div className="slabel">{t.si_title}</div>
-        <div className="fhint" style={{ marginBottom: 8 }}>{t.si_b}</div>
-        {!leg && <Btn kind="gold" onClick={() => legRef.current && legRef.current.click()}>{t.si_btn}</Btn>}
-        {leg?.phase === "read" && <div className="fhint">{t.si_reading}</div>}
-        {leg?.phase === "none" && <div className="warn">{t.si_none}</div>}
-        {leg?.phase === "preview" && (
-          <>
-            <div className="mini" style={{ marginBottom: 8 }}>
-              {fmt(t.si_preview, { n: leg.rows.length, s: leg.skipped })}{leg.capped && <> {fmt(t.si_cap, { n: LEG_CAP })}</>}
-            </div>
-            <div className="row">
-              <Btn onClick={sendLegacy}>{fmt(t.si_confirm, { n: leg.rows.length })}</Btn>
-              <Btn kind="quiet" onClick={() => setLeg(null)}>{t.si_cancel}</Btn>
-            </div>
-          </>
-        )}
-        {leg?.phase === "prog" && <div className="fhint">{fmt(t.si_prog, { i: leg.i, n: leg.n })}</div>}
-        <input type="file" accept=".xlsx,.xls" style={{ display: "none" }} ref={legRef} onChange={onLegacy} />
       </div></Card>
     </>
   );
